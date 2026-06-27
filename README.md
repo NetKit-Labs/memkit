@@ -4,18 +4,11 @@ Embedded-friendly containers for C and C++ with a single shared implementation p
 
 ## Quick start
 
-**Build and test (MCU, default):**
-
 ```bash
-make all              # lib + 15 C++ tests + MCU C++ example
+make all              # lib + 15 C++ tests + MCU example
 make test_c_api_smoke # C API smoke test (MCU)
-make test_c_api_extended  # tier-2 C API (MPU only)
-```
-
-**MPU (embedded Linux — heap, mmap, full C API):**
-
-```bash
-make mpu              # examples + test_c_api_extended
+make mpu              # MPU examples + extended C API test
+make clean
 ```
 
 **C++ — static ring on MCU:**
@@ -50,14 +43,19 @@ See [Build](#build), [C++ API](#c-api), and [C API](#c-api-1) below for full det
 ## Design
 
 ```
-C++ Ring<T>, Vector<T>, …  →  detail/*_core  ←  c_api/*_box  →  src/c_api/*.cpp
+C++ Ring<T>, Vector<T>, …  →  detail/*_core<Policy>  ←  c_api/*_box  →  src/c_api/bindings.cpp
                                       ↑
-                            element_policy (typed + runtime)
+                         typed_element_policy<T>  |  runtime_element_policy (C)
 ```
 
-- **One algorithm per family.** Ring, queue, and deque share `ring_buffer_core`. Stack reuses `vector_core`. HashMap, BTree, and LruCache share `*_map_core` in both C and C++ (C++ wrappers use runtime policies + typed compare/hash functors).
+- **One algorithm per family.** Ring, queue, and deque share `ring_buffer_core`. Stack reuses `vector_core`. HashMap, BTree, and LruCache share `*_map_core`.
 - **No duplicate logic.** C++ uses `typed_element_policy<T>`; C uses `runtime_element_policy` with `elem_size` and optional `copy_fn` / `destroy_fn`.
-- **Opaque C objects.** Each C container is a fixed-size blob (`unsigned char bytes[MEMKIT_*_OBJ_BYTES]`) verified at library build time.
+- **Opaque C objects.** Each C container is a fixed-size blob (`unsigned char bytes[MEMKIT_*_OBJ_BYTES]`) verified at library build time via `include/memkit/c_api/static_checks.hpp`.
+- **Slim C API build.** All `extern "C"` bindings compile in one translation unit (`src/c_api/bindings.cpp`), which `#include`s per-container fragments under `src/c_api/bindings/*.inc.cpp` (those fragments are part of the same compile — not separate or dead code). Callback bridges and layout checks are header-only.
+
+**C++ (16 containers)** — all templates or header-only classes in `include/memkit/containers/`, included via `<memkit/memkit.hpp>`.
+
+**C (14 containers)** — type-erased by design (C23 has no generics). Each container exposes `*_init` / `*_create` / `*_destroy` over a shared `*_box` implementation. `SmallString` and `ByteRing` are C++-only.
 
 Pick the API that fits your project:
 
@@ -80,11 +78,11 @@ memkit distinguishes two build targets (see `include/memkit_config.h`):
 | Default arena backing | caller buffer | mmap |
 | C API tier 2 | stubbed (`*_ERR_UNSUPPORTED`) | full |
 | C++ containers | all | all |
-| Heap STL via memkit | no | optional (`MEMKIT_USE_STL=1`) |
+| Heap STL via memkit | no (`MEMKIT_ALLOW_HEAP_STL=0`) | optional (`MEMKIT_USE_STL=1` → `memkit::stl::vector`, `string`) |
 
-**MCU** builds are sized for firmware: no heap inside memkit, zero-cost STL only (`std::array`, `std::span`, `std::optional`, … via `memkit/stl.hpp`).
+**MCU** builds are sized for firmware: no heap inside memkit, zero-cost STL only (`std::array`, `std::span`, `std::optional`, `std::string_view`, … via `memkit/stl.hpp`). Setting `MEMKIT_USE_STL=1` on MCU is a compile error.
 
-**MPU** builds add heap allocation, mmap-backed arenas, and the full C API.
+**MPU** builds add heap allocation, mmap-backed arenas, and the full C API. Optional heap STL aliases (`memkit::stl::vector`, `memkit::stl::string`) are available only when `MEMKIT_USE_STL=1` (CMake: `-DMEMKIT_USE_STL=ON`). Core containers never use heap STL internally.
 
 ## Memory models
 
@@ -104,15 +102,13 @@ Containers can store elements in several ways. The same options exist in C (flag
 
 ## Build
 
-### Makefile (default: MCU)
+The default Makefile target builds the MCU library and C++ tests:
 
 ```bash
-make all              # lib + 15 C++ tests + MCU example
+make all              # lib + 15 C++ tests + example_mcu
 make test_cpp         # C++ container tests only
 make test_c_api_smoke # minimal C API smoke test (MCU)
-make test_c_api_extended # tier-2 C API integration (MPU)
-make mcu              # examples/example_mcu.cpp
-make mpu              # MPU: example_mpu.cpp + example_mpu.c + test_c_api_extended
+make mpu              # MPU: example_mpu + example_mpu_c + test_c_api_extended
 make clean
 ```
 
@@ -127,9 +123,7 @@ ctest --test-dir build
 
 MPU builds also produce `example_mpu` (C++) and `example_mpu_c` (C).
 
-MPU options: `-DMEMKIT_ALLOW_MMAP=ON`, `-DMEMKIT_USE_STL=ON`.
-
-Link against the static library built from `src/arena.cpp`, `src/mmap_backing.cpp`, and `src/c_api/*.cpp`. Add `-Iinclude` and `-DMEMKIT_MCU=1` or `-DMEMKIT_MPU=1 -DEMBEDDED_LINUX=1`.
+Link against the static library built from `src/arena.cpp`, `src/mmap_backing.cpp`, and `src/c_api/bindings.cpp`. Add `-Iinclude` and `-DMEMKIT_MCU=1` or `-DMEMKIT_MPU=1 -DEMBEDDED_LINUX=1`.
 
 ---
 
@@ -200,19 +194,6 @@ memkit::memory::static_arena arena{backing};
 memkit::Ring<sensor_sample> log;
 assert(memkit::ok(log.init_from_arena(
     arena, 8u, memkit::ring_policy::overwrite_on_full)));
-```
-
-### MPU pattern (mmap)
-
-From `examples/example_mpu.cpp`:
-
-```cpp
-auto backing = memkit::memory::mmap_storage::map(4096u);
-memkit::memory::mmap_arena arena{std::move(backing)};
-
-memkit::Ring<log_line> logs;
-assert(memkit::ok(logs.init_from_arena(
-    arena, 32u, memkit::ring_policy::overwrite_on_full)));
 ```
 
 ### SmallString and ByteRing (MCU-friendly utilities)
@@ -304,7 +285,7 @@ typedef struct ring {
 } ring_t;
 ```
 
-Do not read or write `bytes` directly. Sizes are checked in `src/c_api/static_checks.cpp` at build time.
+Do not read or write `bytes` directly. Sizes are checked in `src/c_api/bindings.cpp` (via `include/memkit/c_api/static_checks.hpp`) at build time.
 
 `MEMKIT_RING_OBJ_BYTES` is **160** (not 128): the ring C API box embeds an `element_callback_bridge` for copy/destroy trampolines. If you change `ring_box` layout, update `memkit_object_sizes.h` and rebuild so the static check catches mismatches.
 
@@ -372,9 +353,7 @@ Each container defines `<name>_status_t` and `<name>_status_ok()`. Common values
 
 Always check return values; do not ignore `[[nodiscard]]` results.
 
-### C example — MCU (static storage)
-
-From `tests/test_c_api_smoke.c`:
+### C example — static storage
 
 ```c
 #include "ring.h"
@@ -392,28 +371,6 @@ ring_init(&ring, &(ring_config_t){
 uint32_t value = 42;
 ring_push_back(&ring, &value);
 ring_deinit(&ring);
-```
-
-### C example — MPU (arena + create)
-
-From `examples/example_mpu.c`:
-
-```c
-#include "arena.h"
-#include "ring.h"
-
-arena_t *arena = NULL;
-arena_create(&arena, 4096u);   /* mmap-backed by default on MPU */
-
-ring_t *logs = NULL;
-ring_create(&logs, sizeof(log_line_t), 32, NULL,
-            RING_FLAG_OVERWRITE_ON_FULL);
-
-log_line_t line = { .message = "event 0" };
-ring_push_back(logs, &line);
-
-ring_destroy(logs);
-arena_destroy(arena);
 ```
 
 ### Arena (C)
@@ -484,20 +441,22 @@ include/
   memkit_object_sizes.h Opaque C object sizes
   *.h                   Per-container C headers
   memkit/
-    memkit.hpp          C++ umbrella
+    memkit.hpp          C++ umbrella (16 containers)
+    stl.hpp             Zero-cost STL (MCU); optional heap aliases (MPU)
     containers/         C++ template wrappers
     detail/             Shared cores (internal)
-    c_api/              C++ boxes for C shims (internal)
+    c_api/              C++ boxes, bridges, lifecycle helpers (internal)
     memory/             Arena, fixed buffer/pool, heap, mmap
 src/
   arena.cpp
   mmap_backing.cpp
-  c_api/*.cpp           Thin C API implementations
+  c_api/
+    bindings.cpp        Single TU for all C API extern "C" bindings
+    bindings/*.inc.cpp  Per-container binding fragments (included, not compiled separately)
 tests/
   test_*_cpp.cpp        C++ container tests (15)
-  test_c_api_smoke.c    C API smoke: init + arena create (MCU/MPU)
-  test_c_api_extended.c Tier-2 C API + arena *_create (MPU)
-  legacy/               Pre-refactor C tests (run via `make test_c_api_legacy` / MPU `ctest`)
+  test_c_api_smoke.c    C API smoke: tier-1 init + arena create (MCU)
+  test_c_api_extended.c Tier-1/2 C API + arena *_create (MPU)
 examples/
   example_mcu.cpp       C++ MCU demo
   example_mpu.cpp       C++ MPU demo
@@ -512,6 +471,16 @@ examples/
 
 Both APIs call the same `detail/*_core` implementations; behavior matches when configuration is equivalent.
 
+### STL policy (`memkit/stl.hpp`)
+
+| Build | Available via memkit | Blocked |
+|-------|---------------------|---------|
+| MCU | `array`, `span`, `optional`, `string_view`, `less`, `hash`, utilities | `memkit::stl::vector`, `memkit::stl::string`; `MEMKIT_USE_STL=1` errors |
+| MPU (default) | Same zero-cost types as MCU | Heap aliases unless `MEMKIT_USE_STL=1` |
+| MPU + `MEMKIT_USE_STL=1` | Also `vector`, `string` aliases | — |
+
+You may still `#include <vector>` directly in your own MPU code; memkit just does not expose or depend on heap STL on MCU.
+
 ## CI
 
-GitHub Actions runs MCU (`make all` + smoke), MPU (`make mpu` incl. extended + legacy C tests), MPU+ASan, CMake/`ctest` (MPU + legacy), and macOS builds on push/PR to `main`/`master` (see `.github/workflows/ci.yml`).
+GitHub Actions runs MCU (`make all` + smoke), MPU (`make mpu`), MPU+ASan, CMake/`ctest` (MPU), and macOS builds on push/PR to `main`/`master` (see `.github/workflows/ci.yml`).

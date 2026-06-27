@@ -4,6 +4,7 @@
 
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/dlist_box.hpp>
 #include <memkit/c_api/status_cast.hpp>
 #include <memkit/detail/dlist_core.hpp>
@@ -29,9 +30,7 @@ dlist_status_t dlist_init(dlist_t *list, const dlist_config_t *config)
         return DLIST_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_DLIST_OBJ_BYTES; ++i) {
-        list->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(list, MEMKIT_DLIST_OBJ_BYTES);
 
     return memkit::c_api::dlist_box::from(list).init(config);
 }
@@ -65,18 +64,18 @@ dlist_status_t dlist_create(
     dlist_config_t config = {
         .elem_size = elem_size,
         .arena = arena,
-        .flags = flags,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | DLIST_FLAG_OWNS_STORAGE,
+            arena,
+            {
+                DLIST_FLAG_OWNS_STORAGE,
+                DLIST_FLAG_DYNAMIC_STORAGE,
+                DLIST_FLAG_ARENA_STORAGE,
+                DLIST_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= DLIST_FLAG_DYNAMIC_STORAGE | DLIST_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= DLIST_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= DLIST_FLAG_ARENA_STORAGE;
-#endif
 
     const dlist_status_t status = dlist_init(list, &config);
     if (!dlist_status_ok(status)) {
@@ -104,28 +103,17 @@ void dlist_deinit(dlist_t *list)
     }
 
     memkit::c_api::dlist_box::from(list).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_DLIST_OBJ_BYTES; ++i) {
-        list->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(list, MEMKIT_DLIST_OBJ_BYTES);
 }
 
 void dlist_destroy(dlist_t *list)
 {
-    if (list == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::dlist_box::from(list).c_flags();
-    dlist_deinit(list);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & DLIST_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & DLIST_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(list);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<dlist_t, memkit::c_api::dlist_box>(
+        list,
+        DLIST_FLAG_OWNS_SELF,
+        DLIST_FLAG_DYNAMIC_STORAGE,
+        dlist_deinit
+    );
 }
 
 size_t dlist_size(const dlist_t *list)

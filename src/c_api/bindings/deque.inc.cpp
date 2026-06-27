@@ -4,6 +4,7 @@
 
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/deque_box.hpp>
 
 #if MEMKIT_ALLOW_HEAP
@@ -20,9 +21,7 @@ deque_status_t deque_init(deque_t* deque, const deque_config_t* config)
         return DEQUE_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_DEQUE_OBJ_BYTES; ++i) {
-        deque->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(deque, MEMKIT_DEQUE_OBJ_BYTES);
 
     return memkit::c_api::deque_box::from(deque).init(config);
 }
@@ -62,18 +61,18 @@ deque_status_t deque_create(
         .elem_size = elem_size,
         .capacity = initial_capacity,
         .arena = arena,
-        .flags = flags | DEQUE_FLAG_OWNS_STORAGE | DEQUE_FLAG_GROWABLE,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | DEQUE_FLAG_OWNS_STORAGE | DEQUE_FLAG_GROWABLE,
+            arena,
+            {
+                DEQUE_FLAG_OWNS_STORAGE,
+                DEQUE_FLAG_DYNAMIC_STORAGE,
+                DEQUE_FLAG_ARENA_STORAGE,
+                DEQUE_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= DEQUE_FLAG_DYNAMIC_STORAGE | DEQUE_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= DEQUE_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= DEQUE_FLAG_ARENA_STORAGE;
-#endif
 
     const deque_status_t status = deque_init(deque, &config);
     if (!deque_status_ok(status)) {
@@ -101,28 +100,17 @@ void deque_deinit(deque_t* deque)
     }
 
     memkit::c_api::deque_box::from(deque).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_DEQUE_OBJ_BYTES; ++i) {
-        deque->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(deque, MEMKIT_DEQUE_OBJ_BYTES);
 }
 
 void deque_destroy(deque_t* deque)
 {
-    if (deque == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::deque_box::from(deque).c_flags();
-    deque_deinit(deque);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & DEQUE_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & DEQUE_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(deque);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<deque_t, memkit::c_api::deque_box>(
+        deque,
+        DEQUE_FLAG_OWNS_SELF,
+        DEQUE_FLAG_DYNAMIC_STORAGE,
+        deque_deinit
+    );
 }
 
 size_t deque_size(const deque_t* deque)

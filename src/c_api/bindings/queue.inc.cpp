@@ -1,6 +1,7 @@
 #include "queue.h"
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/queue_box.hpp>
 
 #if MEMKIT_ALLOW_HEAP
@@ -17,9 +18,7 @@ queue_status_t queue_init(queue_t* queue, const queue_config_t* config)
         return QUEUE_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_QUEUE_OBJ_BYTES; ++i) {
-        queue->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(queue, MEMKIT_QUEUE_OBJ_BYTES);
 
     return memkit::c_api::queue_box::from(queue).init(config);
 }
@@ -59,18 +58,18 @@ queue_status_t queue_create(
         .elem_size = elem_size,
         .capacity = initial_capacity,
         .arena = arena,
-        .flags = flags | QUEUE_FLAG_OWNS_STORAGE | QUEUE_FLAG_GROWABLE,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | QUEUE_FLAG_OWNS_STORAGE | QUEUE_FLAG_GROWABLE,
+            arena,
+            {
+                QUEUE_FLAG_OWNS_STORAGE,
+                QUEUE_FLAG_DYNAMIC_STORAGE,
+                QUEUE_FLAG_ARENA_STORAGE,
+                QUEUE_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= QUEUE_FLAG_DYNAMIC_STORAGE | QUEUE_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= QUEUE_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= QUEUE_FLAG_ARENA_STORAGE;
-#endif
 
     const queue_status_t status = queue_init(queue, &config);
     if (!queue_status_ok(status)) {
@@ -98,28 +97,17 @@ void queue_deinit(queue_t* queue)
     }
 
     memkit::c_api::queue_box::from(queue).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_QUEUE_OBJ_BYTES; ++i) {
-        queue->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(queue, MEMKIT_QUEUE_OBJ_BYTES);
 }
 
 void queue_destroy(queue_t* queue)
 {
-    if (queue == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::queue_box::from(queue).c_flags();
-    queue_deinit(queue);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & QUEUE_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & QUEUE_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(queue);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<queue_t, memkit::c_api::queue_box>(
+        queue,
+        QUEUE_FLAG_OWNS_SELF,
+        QUEUE_FLAG_DYNAMIC_STORAGE,
+        queue_deinit
+    );
 }
 
 size_t queue_size(const queue_t* queue)

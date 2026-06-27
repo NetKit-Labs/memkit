@@ -22,7 +22,6 @@
 
 #if MEMKIT_ALLOW_HEAP_STL
 #include <string>
-#include <string_view>
 #include <vector>
 #endif
 

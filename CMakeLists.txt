@@ -27,12 +27,10 @@ if(MEMKIT_USE_STL AND MEMKIT_EMBEDDED_LINUX)
     add_compile_definitions(MEMKIT_USE_STL=1)
 endif()
 
-file(GLOB MEMKIT_C_API_SRCS CONFIGURE_DEPENDS src/c_api/*.cpp)
-
 add_library(memkit STATIC
     src/arena.cpp
     src/mmap_backing.cpp
-    ${MEMKIT_C_API_SRCS}
+    src/c_api/bindings.cpp
 )
 
 target_include_directories(memkit PUBLIC include)
@@ -56,14 +54,6 @@ if(MEMKIT_EMBEDDED_LINUX)
     add_executable(test_c_api_extended tests/test_c_api_extended.c)
     target_link_libraries(test_c_api_extended PRIVATE memkit)
     add_test(NAME test_c_api_extended COMMAND test_c_api_extended)
-
-    file(GLOB MEMKIT_LEGACY_C_TESTS CONFIGURE_DEPENDS tests/legacy/test_*.c)
-    foreach(legacy_src IN LISTS MEMKIT_LEGACY_C_TESTS)
-        get_filename_component(legacy_name ${legacy_src} NAME_WE)
-        add_executable(${legacy_name} ${legacy_src})
-        target_link_libraries(${legacy_name} PRIVATE memkit)
-        add_test(NAME ${legacy_name} COMMAND ${legacy_name})
-    endforeach()
 endif()
 
 enable_testing()

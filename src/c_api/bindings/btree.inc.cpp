@@ -4,6 +4,7 @@
 
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/btree_box.hpp>
 #include <memkit/c_api/status_cast.hpp>
 #include <memkit/detail/btree_map_core.hpp>
@@ -36,9 +37,7 @@ btree_status_t btree_init(btree_t* tree, const btree_config_t* config)
         return BTREE_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_BTREE_OBJ_BYTES; ++i) {
-        tree->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(tree, MEMKIT_BTREE_OBJ_BYTES);
 
     return memkit::c_api::btree_box::from(tree).init(config);
 }
@@ -74,18 +73,18 @@ btree_status_t btree_create(
         .elem_size   = elem_size,
         .arena       = arena,
         .compare_fn  = compare_fn,
-        .flags       = flags,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | BTREE_FLAG_OWNS_STORAGE,
+            arena,
+            {
+                BTREE_FLAG_OWNS_STORAGE,
+                BTREE_FLAG_DYNAMIC_STORAGE,
+                BTREE_FLAG_ARENA_STORAGE,
+                BTREE_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= BTREE_FLAG_DYNAMIC_STORAGE | BTREE_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= BTREE_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= BTREE_FLAG_ARENA_STORAGE;
-#endif
 
     const btree_status_t status = btree_init(tree, &config);
     if (!btree_status_ok(status)) {
@@ -113,28 +112,17 @@ void btree_deinit(btree_t* tree)
     }
 
     memkit::c_api::btree_box::from(tree).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_BTREE_OBJ_BYTES; ++i) {
-        tree->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(tree, MEMKIT_BTREE_OBJ_BYTES);
 }
 
 void btree_destroy(btree_t* tree)
 {
-    if (tree == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::btree_box::from(tree).c_flags();
-    btree_deinit(tree);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & BTREE_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & BTREE_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(tree);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<btree_t, memkit::c_api::btree_box>(
+        tree,
+        BTREE_FLAG_OWNS_SELF,
+        BTREE_FLAG_DYNAMIC_STORAGE,
+        btree_deinit
+    );
 }
 
 size_t btree_size(const btree_t* tree)

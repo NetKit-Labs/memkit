@@ -2,7 +2,7 @@
 
 /*
  * Opaque object sizes for C API containers.
- * Values are verified at library build time in src/c_api/static_checks.cpp.
+ * Values are verified at library build time in src/c_api/bindings.cpp.
  */
 #ifndef MEMKIT_OBJECT_SIZES_H
 #define MEMKIT_OBJECT_SIZES_H

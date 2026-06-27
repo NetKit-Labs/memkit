@@ -1,6 +1,7 @@
 #include "objpool.h"
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/objpool_box.hpp>
 #include <memkit/c_api/status_cast.hpp>
 #include <memkit/detail/objpool_core.hpp>
@@ -38,9 +39,7 @@ objpool_status_t objpool_init(objpool_t *pool, const objpool_config_t *config)
         return OBJPOOL_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_OBJPOOL_OBJ_BYTES; ++i) {
-        pool->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(pool, MEMKIT_OBJPOOL_OBJ_BYTES);
 
     return memkit::c_api::objpool_box::from(pool).init(config);
 }
@@ -76,18 +75,18 @@ objpool_status_t objpool_create(
         .elem_size = elem_size,
         .capacity = capacity,
         .arena = arena,
-        .flags = flags | OBJPOOL_FLAG_OWNS_STORAGE | OBJPOOL_FLAG_FIXED_CAPACITY,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | OBJPOOL_FLAG_OWNS_STORAGE,
+            arena,
+            {
+                OBJPOOL_FLAG_OWNS_STORAGE,
+                OBJPOOL_FLAG_DYNAMIC_STORAGE,
+                OBJPOOL_FLAG_ARENA_STORAGE,
+                OBJPOOL_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= OBJPOOL_FLAG_DYNAMIC_STORAGE | OBJPOOL_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= OBJPOOL_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= OBJPOOL_FLAG_ARENA_STORAGE;
-#endif
 
     const objpool_status_t status = objpool_init(pool, &config);
     if (!objpool_status_ok(status)) {
@@ -115,28 +114,17 @@ void objpool_deinit(objpool_t *pool)
     }
 
     memkit::c_api::objpool_box::from(pool).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_OBJPOOL_OBJ_BYTES; ++i) {
-        pool->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(pool, MEMKIT_OBJPOOL_OBJ_BYTES);
 }
 
 void objpool_destroy(objpool_t *pool)
 {
-    if (pool == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::objpool_box::from(pool).c_flags();
-    objpool_deinit(pool);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & OBJPOOL_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & OBJPOOL_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(pool);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<objpool_t, memkit::c_api::objpool_box>(
+        pool,
+        OBJPOOL_FLAG_OWNS_SELF,
+        OBJPOOL_FLAG_DYNAMIC_STORAGE,
+        objpool_deinit
+    );
 }
 
 size_t objpool_size(const objpool_t *pool)

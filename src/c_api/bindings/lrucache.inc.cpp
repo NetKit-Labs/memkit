@@ -4,6 +4,7 @@
 
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/lrucache_box.hpp>
 #include <memkit/c_api/status_cast.hpp>
 #include <memkit/detail/lrucache_map_core.hpp>
@@ -50,9 +51,7 @@ lrucache_status_t lrucache_init(lrucache_t* cache, const lrucache_config_t* conf
         return LRUCACHE_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_LRUCACHE_OBJ_BYTES; ++i) {
-        cache->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(cache, MEMKIT_LRUCACHE_OBJ_BYTES);
 
     return memkit::c_api::lrucache_box::from(cache).init(config);
 }
@@ -92,18 +91,18 @@ lrucache_status_t lrucache_create(
         .capacity      = capacity,
         .bucket_count  = bucket_count,
         .arena         = arena,
-        .flags         = flags | LRUCACHE_FLAG_OWNS_STORAGE | LRUCACHE_FLAG_FIXED_CAPACITY,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | LRUCACHE_FLAG_OWNS_STORAGE,
+            arena,
+            {
+                LRUCACHE_FLAG_OWNS_STORAGE,
+                LRUCACHE_FLAG_DYNAMIC_STORAGE,
+                LRUCACHE_FLAG_ARENA_STORAGE,
+                LRUCACHE_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= LRUCACHE_FLAG_DYNAMIC_STORAGE | LRUCACHE_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= LRUCACHE_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= LRUCACHE_FLAG_ARENA_STORAGE;
-#endif
 
     const lrucache_status_t status = lrucache_init(cache, &config);
     if (!lrucache_status_ok(status)) {
@@ -131,28 +130,17 @@ void lrucache_deinit(lrucache_t* cache)
     }
 
     memkit::c_api::lrucache_box::from(cache).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_LRUCACHE_OBJ_BYTES; ++i) {
-        cache->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(cache, MEMKIT_LRUCACHE_OBJ_BYTES);
 }
 
 void lrucache_destroy(lrucache_t* cache)
 {
-    if (cache == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::lrucache_box::from(cache).c_flags();
-    lrucache_deinit(cache);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & LRUCACHE_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & LRUCACHE_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(cache);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<lrucache_t, memkit::c_api::lrucache_box>(
+        cache,
+        LRUCACHE_FLAG_OWNS_SELF,
+        LRUCACHE_FLAG_DYNAMIC_STORAGE,
+        lrucache_deinit
+    );
 }
 
 size_t lrucache_size(const lrucache_t* cache)

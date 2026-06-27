@@ -57,6 +57,7 @@ static void arena_release_backing(arena_t *arena)
 #endif
 }
 
+#if MEMKIT_ALLOW_HEAP || MEMKIT_ALLOW_MMAP
 static arena_status_t arena_acquire_backing(
     arena_t *arena,
     size_t backing_bytes,
@@ -100,6 +101,7 @@ static arena_status_t arena_acquire_backing(
     (void)backing_bytes;
     return ARENA_ERR_UNSUPPORTED;
 }
+#endif /* MEMKIT_ALLOW_HEAP || MEMKIT_ALLOW_MMAP */
 
 extern "C" {
 

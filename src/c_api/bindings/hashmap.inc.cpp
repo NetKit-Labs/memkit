@@ -3,6 +3,7 @@
 #if MEMKIT_C_API_EXTENDED
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/hashmap_box.hpp>
 #include <memkit/c_api/status_cast.hpp>
 #include <memkit/detail/hash_policy.hpp>
@@ -45,9 +46,7 @@ hashmap_status_t hashmap_init(hashmap_t* map, const hashmap_config_t* config)
         return HASHMAP_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_HASHMAP_OBJ_BYTES; ++i) {
-        map->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(map, MEMKIT_HASHMAP_OBJ_BYTES);
 
     return memkit::c_api::hashmap_box::from(map).init(config);
 }
@@ -87,18 +86,18 @@ hashmap_status_t hashmap_create(
         .bucket_count   = initial_buckets,
         .strategy       = strategy,
         .arena          = arena,
-        .flags          = flags | HASHMAP_FLAG_OWNS_STORAGE | HASHMAP_FLAG_GROWABLE,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | HASHMAP_FLAG_OWNS_STORAGE | HASHMAP_FLAG_GROWABLE,
+            arena,
+            {
+                HASHMAP_FLAG_OWNS_STORAGE,
+                HASHMAP_FLAG_DYNAMIC_STORAGE,
+                HASHMAP_FLAG_ARENA_STORAGE,
+                HASHMAP_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= HASHMAP_FLAG_DYNAMIC_STORAGE | HASHMAP_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= HASHMAP_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= HASHMAP_FLAG_ARENA_STORAGE;
-#endif
 
     const hashmap_status_t status = hashmap_init(map, &config);
     if (!hashmap_status_ok(status)) {
@@ -126,28 +125,17 @@ void hashmap_deinit(hashmap_t* map)
     }
 
     memkit::c_api::hashmap_box::from(map).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_HASHMAP_OBJ_BYTES; ++i) {
-        map->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(map, MEMKIT_HASHMAP_OBJ_BYTES);
 }
 
 void hashmap_destroy(hashmap_t* map)
 {
-    if (map == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::hashmap_box::from(map).c_flags();
-    hashmap_deinit(map);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & HASHMAP_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & HASHMAP_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(map);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<hashmap_t, memkit::c_api::hashmap_box>(
+        map,
+        HASHMAP_FLAG_OWNS_SELF,
+        HASHMAP_FLAG_DYNAMIC_STORAGE,
+        hashmap_deinit
+    );
 }
 
 hashmap_strategy_t hashmap_strategy_of(const hashmap_t* map)

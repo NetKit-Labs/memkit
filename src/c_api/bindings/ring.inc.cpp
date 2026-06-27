@@ -1,6 +1,7 @@
 #include "ring.h"
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/ring_box.hpp>
 
 #if MEMKIT_ALLOW_HEAP
@@ -17,9 +18,7 @@ ring_status_t ring_init(ring_t *ring, const ring_config_t *config)
         return RING_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_RING_OBJ_BYTES; ++i) {
-        ring->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(ring, MEMKIT_RING_OBJ_BYTES);
 
     return memkit::c_api::ring_box::from(ring).init(config);
 }
@@ -55,18 +54,18 @@ ring_status_t ring_create(
         .elem_size = elem_size,
         .capacity = capacity,
         .arena = arena,
-        .flags = flags | RING_FLAG_OWNS_STORAGE,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | RING_FLAG_OWNS_STORAGE,
+            arena,
+            {
+                RING_FLAG_OWNS_STORAGE,
+                RING_FLAG_DYNAMIC_STORAGE,
+                RING_FLAG_ARENA_STORAGE,
+                RING_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= RING_FLAG_DYNAMIC_STORAGE | RING_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= RING_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= RING_FLAG_ARENA_STORAGE;
-#endif
 
     const ring_status_t status = ring_init(ring, &config);
     if (!ring_status_ok(status)) {
@@ -94,28 +93,17 @@ void ring_deinit(ring_t *ring)
     }
 
     memkit::c_api::ring_box::from(ring).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_RING_OBJ_BYTES; ++i) {
-        ring->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(ring, MEMKIT_RING_OBJ_BYTES);
 }
 
 void ring_destroy(ring_t *ring)
 {
-    if (ring == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::ring_box::from(ring).c_flags();
-    ring_deinit(ring);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & RING_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & RING_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(ring);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<ring_t, memkit::c_api::ring_box>(
+        ring,
+        RING_FLAG_OWNS_SELF,
+        RING_FLAG_DYNAMIC_STORAGE,
+        ring_deinit
+    );
 }
 
 size_t ring_size(const ring_t *ring)

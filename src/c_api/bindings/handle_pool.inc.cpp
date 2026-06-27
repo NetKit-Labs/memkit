@@ -1,6 +1,7 @@
 #include "handle_pool.h"
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/handle_pool_box.hpp>
 #include <memkit/c_api/status_cast.hpp>
 #include <memkit/detail/handle_pool_core.hpp>
@@ -34,9 +35,7 @@ handle_pool_status_t handle_pool_init(handle_pool_t* pool, const handle_pool_con
         return HANDLE_POOL_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_HANDLE_POOL_OBJ_BYTES; ++i) {
-        pool->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(pool, MEMKIT_HANDLE_POOL_OBJ_BYTES);
 
     return memkit::c_api::handle_pool_box::from(pool).init(config);
 }
@@ -72,18 +71,18 @@ handle_pool_status_t handle_pool_create(
         .elem_size = elem_size,
         .capacity  = capacity,
         .arena     = arena,
-        .flags     = flags | HANDLE_POOL_FLAG_OWNS_STORAGE | HANDLE_POOL_FLAG_FIXED_CAPACITY,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | HANDLE_POOL_FLAG_OWNS_STORAGE | HANDLE_POOL_FLAG_FIXED_CAPACITY,
+            arena,
+            {
+                HANDLE_POOL_FLAG_OWNS_STORAGE,
+                HANDLE_POOL_FLAG_DYNAMIC_STORAGE,
+                HANDLE_POOL_FLAG_ARENA_STORAGE,
+                HANDLE_POOL_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= HANDLE_POOL_FLAG_DYNAMIC_STORAGE | HANDLE_POOL_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= HANDLE_POOL_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= HANDLE_POOL_FLAG_ARENA_STORAGE;
-#endif
 
     const handle_pool_status_t status = handle_pool_init(pool, &config);
     if (!handle_pool_status_ok(status)) {
@@ -114,21 +113,12 @@ void handle_pool_deinit(handle_pool_t* pool)
 
 void handle_pool_destroy(handle_pool_t* pool)
 {
-    if (pool == NULL) {
-        return;
-    }
-
-    const unsigned flags = memkit::c_api::handle_pool_box::from(pool).c_flags();
-    handle_pool_deinit(pool);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((flags & HANDLE_POOL_FLAG_OWNS_SELF) != 0u &&
-        (flags & HANDLE_POOL_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(pool);
-    }
-#else
-    (void)flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<handle_pool_t, memkit::c_api::handle_pool_box>(
+        pool,
+        HANDLE_POOL_FLAG_OWNS_SELF,
+        HANDLE_POOL_FLAG_DYNAMIC_STORAGE,
+        handle_pool_deinit
+    );
 }
 
 size_t handle_pool_size(const handle_pool_t* pool)

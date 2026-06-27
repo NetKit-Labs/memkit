@@ -1,6 +1,7 @@
 #include "bitset.h"
 
 #include <memkit/c_api/create_object.hpp>
+#include <memkit/c_api/object_lifecycle.hpp>
 #include <memkit/c_api/bitset_box.hpp>
 #include <memkit/c_api/status_cast.hpp>
 #include <memkit/detail/bitset_core.hpp>
@@ -29,9 +30,7 @@ bitset_status_t bitset_init(bitset_t *bitset, const bitset_config_t *config)
         return BITSET_ERR_NULL;
     }
 
-    for (std::size_t i = 0u; i < MEMKIT_BITSET_OBJ_BYTES; ++i) {
-        bitset->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(bitset, MEMKIT_BITSET_OBJ_BYTES);
 
     return memkit::c_api::bitset_box::from(bitset).init(config);
 }
@@ -65,18 +64,18 @@ bitset_status_t bitset_create(
     bitset_config_t config = {
         .capacity = capacity,
         .arena = arena,
-        .flags = flags | BITSET_FLAG_OWNS_STORAGE | BITSET_FLAG_FIXED_CAPACITY,
+        .flags     = memkit::c_api::detail::owned_create_config_flags(
+            flags | BITSET_FLAG_OWNS_STORAGE,
+            arena,
+            {
+                BITSET_FLAG_OWNS_STORAGE,
+                BITSET_FLAG_DYNAMIC_STORAGE,
+                BITSET_FLAG_ARENA_STORAGE,
+                BITSET_FLAG_OWNS_SELF,
+            },
+            0u
+        ),
     };
-
-#if MEMKIT_ALLOW_HEAP
-    if (arena == NULL) {
-        config.flags |= BITSET_FLAG_DYNAMIC_STORAGE | BITSET_FLAG_OWNS_SELF;
-    } else {
-        config.flags |= BITSET_FLAG_ARENA_STORAGE;
-    }
-#else
-    config.flags |= BITSET_FLAG_ARENA_STORAGE;
-#endif
 
     const bitset_status_t status = bitset_init(bitset, &config);
     if (!bitset_status_ok(status)) {
@@ -104,28 +103,17 @@ void bitset_deinit(bitset_t *bitset)
     }
 
     memkit::c_api::bitset_box::from(bitset).deinit();
-    for (std::size_t i = 0u; i < MEMKIT_BITSET_OBJ_BYTES; ++i) {
-        bitset->bytes[i] = 0u;
-    }
+    memkit::c_api::detail::zero_opaque_bytes(bitset, MEMKIT_BITSET_OBJ_BYTES);
 }
 
 void bitset_destroy(bitset_t *bitset)
 {
-    if (bitset == NULL) {
-        return;
-    }
-
-    const unsigned saved_flags = memkit::c_api::bitset_box::from(bitset).c_flags();
-    bitset_deinit(bitset);
-
-#if MEMKIT_ALLOW_HEAP
-    if ((saved_flags & BITSET_FLAG_OWNS_SELF) != 0u &&
-        (saved_flags & BITSET_FLAG_DYNAMIC_STORAGE) != 0u) {
-        std::free(bitset);
-    }
-#else
-    (void)saved_flags;
-#endif
+    memkit::c_api::detail::destroy_owned_object<bitset_t, memkit::c_api::bitset_box>(
+        bitset,
+        BITSET_FLAG_OWNS_SELF,
+        BITSET_FLAG_DYNAMIC_STORAGE,
+        bitset_deinit
+    );
 }
 
 size_t bitset_capacity(const bitset_t *bitset)
