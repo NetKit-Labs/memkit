@@ -8,8 +8,7 @@ Embedded-friendly containers for C and C++ with a single shared implementation p
 make all              # lib + 31 C++ tests + 9 C API tests + 4 MCU examples
 make benchmark        # timing + size vs hand-rolled C
 make test_c_api       # tier-1 C API tests (MCU)
-make test_c_api_smoke # legacy quick C API smoke (MCU)
-make mpu              # MPU examples + tier-2 C API tests
+make mpu              # MPU: examples + tier-2 C API tests + integration test
 make clean
 ```
 
@@ -70,7 +69,7 @@ The public API is **feature-complete** for embedded use on Unix (macOS and Linux
 | C arena | 1 | yes | yes | Bump allocator; mmap/heap create on MPU |
 | C++-only helpers | 18 | yes | yes | No C bindings (see [cheat sheet](#container-cheat-sheet)) |
 
-**Tests:** 31 C++ test binaries cover all 32 C++ containers (`Stack` and `Queue` share `test_stack_queue_cpp.cpp`). C API: **9 tier-1 tests** on MCU (`test_arena_c`, `test_ring_c`, … — one per header) plus **7 tier-2 tests** on MPU (`test_deque_c`, `test_hashmap_c`, …). Legacy integration tests: `test_c_api_smoke.c`, `test_c_api_extended.c`.
+**Tests:** 31 C++ test binaries cover all 32 C++ containers (`Stack` and `Queue` share `test_stack_queue_cpp.cpp`). C API: **9 tier-1 tests** on MCU (`test_arena_c`, `test_ring_c`, … — one per header), **7 tier-2 tests** on MPU, plus **`test_c_api_extended.c`** (shared `arena_create` + all `*_create` helpers on one arena).
 
 Pick the API that fits your project:
 
@@ -124,8 +123,7 @@ make all              # lib + 31 C++ tests + 9 C API tests + 4 MCU examples
 make benchmark        # timing + size vs hand-rolled C
 make test_cpp         # C++ container tests only
 make test_c_api       # tier-1 C API tests (MCU, 9 binaries)
-make test_c_api_smoke # legacy quick C API smoke (MCU)
-make mpu              # MPU: examples + 7 tier-2 C API tests + test_c_api_extended
+make mpu              # MPU: examples + 7 tier-2 C API tests + integration test
 make clean
 ```
 
@@ -699,8 +697,7 @@ src/
 tests/
   test_*_cpp.cpp        C++ container tests (31)
   test_*_c.c            C API per-container tests (9 MCU + 7 MPU tier 2)
-  test_c_api_smoke.c    Legacy C API smoke (MCU)
-  test_c_api_extended.c Legacy C API integration (MPU)
+  test_c_api_extended.c C API integration: arena_create + all *_create (MPU)
 examples/
   example_mcu.cpp               C++ ring + arena (basic)
   example_mcu_c.c               C API ring + queue (tier 1)
@@ -738,8 +735,8 @@ GitHub Actions (`.github/workflows/ci.yml`):
 
 | Job | What it runs |
 |-----|----------------|
-| `mcu-ubuntu` | Clang 21 — `make all`, smoke test |
-| `mcu-gcc-ubuntu` | GCC 14 (C++23) — `make all`, smoke test |
+| `mcu-ubuntu` | Clang 21 — `make all` (C++ + C API tier 1) |
+| `mcu-gcc-ubuntu` | GCC 14 (C++23) — `make all` |
 | `mpu-ubuntu` | Clang 21 — `make mpu` |
 | `mpu-asan-ubuntu` | MPU + ASan/UBSan |
 | `cmake-mcu-ubuntu` | CMake MCU — `ctest` |

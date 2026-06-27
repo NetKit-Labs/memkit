@@ -34,9 +34,7 @@ jobs:
           echo "CXX=${{ github.workspace }}/llvm/bin/clang++" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=${{ github.workspace }}/llvm/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
       - name: Build and test (MCU Clang)
-        run: |
-          make all
-          make test_c_api_smoke
+        run: make all
 
   mcu-gcc-ubuntu:
     runs-on: ubuntu-latest
@@ -48,11 +46,6 @@ jobs:
         run: |
           make clean
           make all \
-            CC=gcc-14 \
-            CXX=g++-14 \
-            CXXFLAGS="-std=c++23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MCU=1" \
-            CFLAGS="-std=c23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MCU=1"
-          make test_c_api_smoke \
             CC=gcc-14 \
             CXX=g++-14 \
             CXXFLAGS="-std=c++23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MCU=1" \
@@ -204,7 +197,6 @@ jobs:
       - name: Build and test (MCU + MPU)
         run: |
           make all
-          make test_c_api_smoke
           make mpu
       - name: Run benchmarks
         run: make benchmark BENCH_ITERS=50000

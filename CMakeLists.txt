@@ -105,7 +105,3 @@ foreach(test_name IN LISTS MEMKIT_CPP_TESTS)
     target_link_libraries(${test_name} PRIVATE memkit)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
-
-add_executable(test_c_api_smoke tests/test_c_api_smoke.c)
-target_link_libraries(test_c_api_smoke PRIVATE memkit)
-add_test(NAME test_c_api_smoke COMMAND test_c_api_smoke)

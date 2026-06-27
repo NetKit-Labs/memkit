@@ -41,7 +41,7 @@ MPU_CFLAGS = -std=c23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MPU=1 -DEMBEDD
              -DMEMKIT_ALLOW_HEAP=1 -DMEMKIT_ALLOW_MMAP=1
 MPU_OBJS = $(BUILD)/mpu/arena.o $(BUILD)/mpu/mmap_backing.o $(BUILD)/mpu/c_api/bindings.o
 
-.PHONY: all test_cpp test_c_api test_c_api_smoke test_c_api_mpu test_c_api_extended mcu mpu clean lib benchmark benchmark-size
+.PHONY: all test_cpp test_c_api test_c_api_mpu test_c_api_extended mcu mpu clean lib benchmark benchmark-size
 
 all: lib test_cpp test_c_api mcu
 
@@ -61,9 +61,6 @@ test_c_api: $(addprefix $(BUILD)/,$(C_API_MCU_TESTS))
 
 test_c_api_mpu: $(addprefix $(BUILD)/mpu/,$(C_API_MPU_TESTS))
 	@for t in $(C_API_MPU_TESTS); do echo "==> $$t"; ./$(BUILD)/mpu/$$t || exit 1; done
-
-test_c_api_smoke: $(BUILD)/test_c_api_smoke
-	./$(BUILD)/test_c_api_smoke
 
 test_c_api_extended: $(BUILD)/test_c_api_extended
 	./$(BUILD)/test_c_api_extended
@@ -92,12 +89,6 @@ $(BUILD)/mpu/$(1): $(BUILD)/mpu/$(1).o $(MPU_OBJS) | $(BUILD)/mpu/c_api
 endef
 
 $(foreach t,$(C_API_MPU_TESTS),$(eval $(call C_API_MPU_TEST_RULE,$(t))))
-
-$(BUILD)/test_c_api_smoke.o: tests/test_c_api_smoke.c | $(BUILD)
-	$(CXX) $(CFLAGS) -x c -c -o $@ $<
-
-$(BUILD)/test_c_api_smoke: $(BUILD)/test_c_api_smoke.o $(LIB_OBJS) | $(BUILD)
-	$(CXX) -o $@ $(BUILD)/test_c_api_smoke.o $(LIB_OBJS) $(LDFLAGS)
 
 $(BUILD)/test_c_api_extended.o: tests/test_c_api_extended.c | $(BUILD)/mpu
 	$(CC) $(MPU_CFLAGS) -c -o $@ $<
