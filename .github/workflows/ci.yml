@@ -52,7 +52,11 @@ jobs:
             CXX=g++-14 \
             CXXFLAGS="-std=c++23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MCU=1" \
             CFLAGS="-std=c23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MCU=1"
-          make lib-mcu-c check-lib-mcu-c test-lib-mcu-c-link
+          make lib-mcu-c check-lib-mcu-c test-lib-mcu-c-link \
+            CC=gcc-14 \
+            CXX=g++-14 \
+            CXXFLAGS="-std=c++23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MCU=1" \
+            CFLAGS="-std=c23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MCU=1"
 
   mpu-ubuntu:
     runs-on: ubuntu-latest
