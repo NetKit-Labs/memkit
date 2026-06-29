@@ -129,7 +129,7 @@ memkit is built for firmware teams who **choose capacity up front** and **check 
 **The library guarantees:**
 
 - Containers do not silently grow past **fixed capacity** on MCU; push/pop when full or empty returns an explicit status.
-- **Arena** bump allocation validates offset, alignment padding, and remaining space (see `arena_alloc` / C++ `memory::arena::allocate`).
+- **Arena** bump allocation validates offset, alignment padding, and remaining space (see `arena_alloc` / C++ `memory::arena::allocate`). Alignment is applied to the **absolute address** of the next slot (base + offset), so a backing buffer that is not itself aligned can still satisfy `alignof(std::atomic<…>)` and similar requirements — at the cost of a few bytes of internal padding.
 - Obvious bad config is rejected (`capacity == 0`, null storage, invalid alignment).
 
 **You own:**

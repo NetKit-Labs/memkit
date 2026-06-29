@@ -32,6 +32,17 @@ int main()
     void* second = nullptr;
     assert(tight_arena.allocate(8u, 8u, &second) == memkit::status::oom);
 
+    struct {
+        char pad;
+        memkit::stl::array<std::byte, 128> bytes;
+    } unaligned_backing{};
+    memkit::memory::fixed_buffer unaligned_buf{unaligned_backing.bytes};
+    memkit::memory::static_arena unaligned_arena{unaligned_buf};
+
+    void* aligned_slot = nullptr;
+    assert(memkit::ok(unaligned_arena.allocate(32u, alignof(std::max_align_t), &aligned_slot)));
+    assert((reinterpret_cast<std::uintptr_t>(aligned_slot) & (alignof(std::max_align_t) - 1u)) == 0u);
+
     void* calloc_overflow = nullptr;
     assert(tight_arena.calloc(2u, SIZE_MAX, 8u, &calloc_overflow) == memkit::status::invalid);
 

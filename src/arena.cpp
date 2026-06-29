@@ -246,11 +246,17 @@ arena_status_t arena_alloc(
         return ARENA_ERR_OOM;
     }
 
-    const size_t padding = memkit::detail::alignment_padding(arena->offset_bytes, alignment);
-    if (memkit::detail::add_would_overflow(arena->offset_bytes, padding)) {
+    const uintptr_t base_addr = reinterpret_cast<uintptr_t>(arena->base);
+    const uintptr_t raw_addr  = base_addr + arena->offset_bytes;
+    if (raw_addr < base_addr) {
         return ARENA_ERR_OOM;
     }
-    const size_t aligned_offset = arena->offset_bytes + padding;
+
+    const uintptr_t aligned_addr = (raw_addr + alignment - 1u) & ~(static_cast<uintptr_t>(alignment) - 1u);
+    const size_t aligned_offset = static_cast<size_t>(aligned_addr - base_addr);
+    if (aligned_offset < arena->offset_bytes) {
+        return ARENA_ERR_OOM;
+    }
 
     if (memkit::detail::add_would_overflow(aligned_offset, size)) {
         return ARENA_ERR_OOM;
@@ -261,7 +267,7 @@ arena_status_t arena_alloc(
         return ARENA_ERR_OOM;
     }
 
-    void *const ptr = arena->base + aligned_offset;
+    void *const ptr = reinterpret_cast<void*>(aligned_addr);
     arena->offset_bytes = new_offset;
     arena->allocation_count++;
 

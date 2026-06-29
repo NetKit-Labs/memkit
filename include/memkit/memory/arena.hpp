@@ -79,11 +79,17 @@ public:
             return status::oom;
         }
 
-        const std::size_t padding = detail::alignment_padding(offset_bytes_, alignment);
-        if (detail::add_would_overflow(offset_bytes_, padding)) {
+        const std::uintptr_t base_addr = reinterpret_cast<std::uintptr_t>(base());
+        const std::uintptr_t raw_addr  = base_addr + offset_bytes_;
+        if (raw_addr < base_addr) {
             return status::oom;
         }
-        const std::size_t aligned_offset = offset_bytes_ + padding;
+
+        const std::uintptr_t aligned_addr = detail::align_up_address(raw_addr, alignment);
+        const std::size_t aligned_offset = static_cast<std::size_t>(aligned_addr - base_addr);
+        if (aligned_offset < offset_bytes_) {
+            return status::oom;
+        }
 
         if (detail::add_would_overflow(aligned_offset, size)) {
             return status::oom;
@@ -94,7 +100,7 @@ public:
             return status::oom;
         }
 
-        *out_ptr = base() + aligned_offset;
+        *out_ptr = reinterpret_cast<void*>(aligned_addr);
         offset_bytes_ = new_offset;
         ++allocation_count_;
         return status::ok;
