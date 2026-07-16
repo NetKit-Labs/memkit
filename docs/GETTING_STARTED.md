@@ -177,7 +177,7 @@ log.init_from_arena(arena, 16u, memkit::ring_policy::overwrite_on_full);
 ### Clone and test
 
 ```bash
-git clone https://github.com/jameslavrenz/memkit.git
+git clone https://github.com/NetKit-Labs/memkit.git
 cd memkit
 make all          # MCU: lib + tests + examples
 make mpu          # MPU: tier-2 C API + heap arena test + integration test
@@ -198,7 +198,7 @@ ctest --test-dir build
 include(FetchContent)
 FetchContent_Declare(
     memkit
-    GIT_REPOSITORY https://github.com/jameslavrenz/memkit.git
+    GIT_REPOSITORY https://github.com/NetKit-Labs/memkit.git
     GIT_TAG        v0.2.4
 )
 FetchContent_MakeAvailable(memkit)
