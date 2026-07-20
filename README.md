@@ -219,7 +219,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-On **Windows MPU**, `MEMKIT_MPU=ON` enables arena virtual backing via `VirtualAlloc` (no `EMBEDDED_LINUX` required). MSVC uses `/GR-` and `/EHsc-`; Clang/GCC use `-fno-exceptions -fno-rtti`.
+On **Windows MPU**, `MEMKIT_MPU=ON` enables arena virtual backing via `VirtualAlloc` (no `EMBEDDED_LINUX` required). CI builds Windows MPU with LLVM Clang; CMake also sets `/GR-` and `/EHsc-` when using MSVC.
 
 MPU builds also produce `example_mpu` (C++) and `example_mpu_c` (C).
 

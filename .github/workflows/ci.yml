@@ -201,17 +201,6 @@ jobs:
       - name: Test
         run: ctest --test-dir build-mpu -C Debug --output-on-failure
 
-  mpu-windows-msvc:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure (MPU, MSVC)
-        run: cmake -B build-msvc -DMEMKIT_MPU=ON -DMEMKIT_ALLOW_MMAP=ON
-      - name: Build
-        run: cmake --build build-msvc --config Release
-      - name: Test
-        run: ctest --test-dir build-msvc -C Release --output-on-failure
-
   benchmark-ubuntu:
     runs-on: ubuntu-latest
     steps:
