@@ -35,11 +35,11 @@ Both call the same `detail/*_core` logic. The C API does **not** wrap C++ contai
 
 ## MCU vs MPU: two deployment models
 
-memkit splits the world into **MCU** (bare-metal firmware) and **MPU** (embedded Linux). This is a **compile-time policy**, not a runtime switch.
+memkit splits embedded work into **MCU** (bare-metal / RTOS firmware) and **MPU** (embedded Linux, edge gateway, capable host). **Both are first-class** — same 32 C++ utilities and shared cores; compile-time flags gate heap, virtual arena backing, and tier-2 C bindings. MCU is the **default Makefile target** because it is the most constrained environment, not because MPU is secondary.
 
 | | **MCU** | **MPU** |
 |--|---------|---------|
-| **Typical platform** | Cortex-M, bare-metal, RTOS | Embedded Linux, macOS/Windows host MPU builds |
+| **Typical platform** | Cortex-M, bare-metal, RTOS | Embedded Linux (Yocto, Buildroot), edge gateway, dev host |
 | **Define** | `MEMKIT_MCU=1` | `MEMKIT_MPU=1` (+ `EMBEDDED_LINUX=1` on Linux; optional on Windows/macOS) |
 | **Heap inside memkit** | off | on (`MEMKIT_ALLOW_HEAP=1`) |
 | **Virtual arena backing** | off | on (`MEMKIT_ALLOW_MMAP=1`) — `mmap` or `VirtualAlloc` |
@@ -52,16 +52,18 @@ memkit splits the world into **MCU** (bare-metal firmware) and **MPU** (embedded
 
 **MCU firmware** often has no `malloc`, no virtual memory, and strict flash/RAM budgets. Shipping hashmap/list/deque C bindings plus heap paths would bloat images and invite non-deterministic failure modes. Tier-1 C API covers the containers most C firmware needs; heavier containers remain available through **C++ headers** with static or arena storage.
 
-**MPU services** on embedded Linux can use heap and mmap safely. Tier-2 C containers, `*_create` helpers, growable policies, and mmap-backed arenas become practical.
+**MPU services** on embedded Linux and MPU-class SoCs can use heap and virtual memory safely. Tier-2 C containers, `*_create` helpers, growable policies, and virtual-backed arenas (`mmap` / `VirtualAlloc`) become practical — typical for protocol stacks, logging daemons, and gateway services running Linux userspace.
 
 ### How to choose
 
 ```
 Bare-metal / no heap in your platform port     →  MCU
-Embedded Linux with malloc/mmap                →  MPU
+Embedded Linux / MPU SoC with malloc + VM      →  MPU
+Edge gateway or Linux userspace service        →  MPU
 Pure C firmware, smallest tier-1 image         →  MCU + C API
 Need every container in C on Linux             →  MPU + C API
 Need every container on MCU                    →  MCU + C++ API (memkit.hpp)
+Host dev / CI (Linux, macOS, Windows)          →  MPU (`-DMEMKIT_MPU=ON`)
 ```
 
 Authoritative flags live in [`include/memkit_config.h`](../include/memkit_config.h) (included directly by all C container headers).
@@ -263,9 +265,10 @@ C opaque blobs (`ring_t.bytes[MEMKIT_RING_OBJ_BYTES]`) hide layout; sizes are ch
 3. **Size storage explicitly** — memkit enforces capacity at runtime but expects sane init sizes from you (see [bounds and sizing](#bounds-and-sizing-what-memkit-checks-vs-what-you-own)).
 4. **C firmware** → tier-1 C API + optional `libmemkit_mcu_c.a`.
 5. **C++ firmware on MCU** → `memkit.hpp` + static/`std::array`; all 32 utilities available.
-6. **Heavy maps/lists in C on MCU** → not in tier-1 C; use C++ API or MPU build.
-7. **RTOS / ISR sharing** → read [CONCURRENCY.md](CONCURRENCY.md); default is single-context; use `SpscQueue` / `MpscQueue` / `DoubleBuffer` for handoff, or your mutex.
-8. Always check **status**; use helpers and tests as templates.
+6. **Embedded Linux / gateway in C or C++** → MPU build; tier-2 C API + virtual/heaps arenas.
+7. **Heavy maps/lists in C on MCU** → not in tier-1 C; use C++ API or MPU build.
+8. **RTOS / ISR sharing** → read [CONCURRENCY.md](CONCURRENCY.md); default is single-context; use `SpscQueue` / `MpscQueue` / `DoubleBuffer` for handoff, or your mutex.
+9. Always check **status**; use helpers and tests as templates.
 
 ---
 
@@ -277,3 +280,4 @@ C opaque blobs (`ring_t.bytes[MEMKIT_RING_OBJ_BYTES]`) hide layout; sizes are ch
 - [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md) — which container for which job
 - [DISTRIBUTING_MCU_C.md](DISTRIBUTING_MCU_C.md) — prebuilt C library without libstdc++ link
 - [README § Targets](../README.md#targets) — quick reference tables
+- [README § Examples](../README.md#examples) — MCU and MPU runnable demos

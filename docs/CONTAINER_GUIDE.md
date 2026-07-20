@@ -1,6 +1,6 @@
 # Which container?
 
-memkit ships **32 C++ utilities** and **14 C containers** (+ `arena_t`). **Parity:** the 14 C-bound types share `detail/*_core` with C++; the other 18 utilities are C++-only (templates, atomics, or fixed-size helpers). See [C/C++ parity](C_API_REFERENCE.md#cc-parity).
+memkit ships **32 C++ utilities** and **14 C containers** (+ `arena_t`) for **MCU firmware and MPU embedded hosts** — same cores, different compile-time memory policy. **Parity:** the 14 C-bound types share `detail/*_core` with C++; the other 18 utilities are C++-only (templates, atomics, or fixed-size helpers). See [C/C++ parity](C_API_REFERENCE.md#cc-parity).
 
 **Architecture:** memkit is **zero-overhead and OS-agnostic** — no internal mutexes. Types fall into **lock-free utilities** (`SpscQueue`, `MpscQueue`, `DoubleBuffer` — C++ only, hardware-dependent) and **single-threaded containers** (everything else). See [README § Zero-overhead architecture](../README.md#zero-overhead--os-agnostic-architecture) and [CONCURRENCY.md](CONCURRENCY.md).
 
@@ -183,6 +183,7 @@ Full list: [README container cheat sheet](../README.md#container-cheat-sheet).
 
 ## Related docs
 
+- [README § Examples](../README.md#examples) — MCU and MPU runnable demos
 - [CONCURRENCY.md](CONCURRENCY.md) — thread/ISR contract, lock-free trio, FreeRTOS patterns
 - [DESIGN_PHILOSOPHY.md](DESIGN_PHILOSOPHY.md) — memory models, MCU vs MPU
 - [ADOPTION_GUIDE.md](ADOPTION_GUIDE.md) — build flags, `-latomic`

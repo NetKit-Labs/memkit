@@ -95,14 +95,17 @@ Windows MPU is supported (`MEMKIT_MPU=1`, VirtualAlloc arena backing). CI runs `
 
 ## Build targets: MCU vs MPU
 
+**Both targets are first-class embedded deployment models.** MCU is the default Makefile build because it exercises the most constrained configuration (no heap, tier-1 C focus); MPU adds heap, virtual arena backing, and the full tier-2 C API for embedded Linux and MPU-class hosts.
+
 Authoritative flags: [`include/memkit_config.h`](../include/memkit_config.h).
 
-| | **MCU** (bare-metal / RTOS firmware) | **MPU** (embedded Linux, macOS, Windows host) |
-|--|--------------------------------------|-----------------------------------------------|
+| | **MCU** (bare-metal / RTOS) | **MPU** (embedded Linux, edge gateway, dev host) |
+|--|-----------------------------|--------------------------------------------------|
+| **Typical use** | Firmware image, sensor node | Linux service, gateway daemon, CI/dev |
 | **Define** | `MEMKIT_MCU=1` | `MEMKIT_MPU=1` (+ `EMBEDDED_LINUX=1` on Linux; optional on Windows/macOS) |
 | **Heap inside memkit** | off (`MEMKIT_ALLOW_HEAP=0`) | on (`MEMKIT_ALLOW_HEAP=1`) |
-| **mmap arenas** | off | on (`MEMKIT_ALLOW_MMAP=1`, can disable) |
-| **Default arena backing** | caller fixed buffer | mmap |
+| **Virtual arena backing** | off | on (`MEMKIT_ALLOW_MMAP=1`, can disable) — `mmap` or `VirtualAlloc` |
+| **Default arena backing** | caller fixed buffer | virtual memory when enabled |
 | **C API tier 2** | stubs → `*_ERR_UNSUPPORTED` | full |
 | **C++ containers** | all 32 utilities | all 32 utilities |
 | **Heap STL via memkit** | compile error if `MEMKIT_USE_STL=1` | off by default; opt-in with `MEMKIT_USE_STL=1` |
@@ -110,8 +113,8 @@ Authoritative flags: [`include/memkit_config.h`](../include/memkit_config.h).
 ### Makefile
 
 ```bash
-make all              # MCU — default CXXFLAGS/CFLAGS in Makefile
-make mpu              # MPU — adds heap + mmap + tier-2 C tests
+make all              # MCU — lib, tests, 4 MCU examples (default)
+make mpu              # MPU — tier-2 C tests, heap arena test, 2 MPU examples, integration test
 make lib-mcu-c        # Freestanding tier-1 C archive (see below)
 ```
 

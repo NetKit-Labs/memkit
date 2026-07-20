@@ -1,16 +1,18 @@
 # Getting started with memkit
 
-This guide walks through the **80% path** most firmware projects need: static storage, init, push/pop, check status. For the full API see [README](../README.md). To pick a container see [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md).
+memkit targets **embedded systems on MCU and MPU** — bare-metal firmware and embedded-Linux/MPU-class hosts share the same container cores; compile-time flags choose static/arena vs heap/virtual backing. This guide walks through the **80% path** for each target: static storage on MCU, virtual arena + tier-2 C on MPU. For the full API see [README](../README.md). To pick a container see [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md).
 
 ## Pick your path
+
+Both **MCU** and **MPU** are first-class. `make all` defaults to MCU because it is the most constrained build, not because MPU is optional.
 
 | You are… | Start here |
 |----------|------------|
 | New to memkit — want the “why” | [Design philosophy](DESIGN_PHILOSOPHY.md) |
 | STL vs memkit, MCU/MPU flags, vendoring one container | [Adoption guide](ADOPTION_GUIDE.md) |
-| C firmware, bare-metal (MCU) | [C on MCU](#c-on-mcu-tier-1) |
-| C++ firmware, bare-metal | [C++ on MCU](#c-on-mcu) |
-| Embedded Linux / macOS / Windows (MPU) | [MPU builds](#mpu-host-and-embedded-linux) |
+| Bare-metal / RTOS firmware (MCU) | [C++ on MCU](#c-on-mcu) or [C on MCU](#c-on-mcu-tier-1) |
+| Embedded Linux, edge gateway, MPU dev host | [MPU builds](#mpu--embedded-linux--capable-host) |
+| Runnable examples | [Examples](#examples) |
 | Choosing a container | [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md) |
 | RTOS, ISR, or multi-task sharing | [CONCURRENCY.md](CONCURRENCY.md) |
 
@@ -128,9 +130,9 @@ arena_deinit(&arena);
 
 ---
 
-## MPU (host and embedded Linux)
+## MPU — embedded Linux / capable host
 
-MPU builds enable heap, virtual-memory arenas, and tier-2 C containers (hashmap, btree, deque, …). Supported on **embedded Linux** (`EMBEDDED_LINUX=1`), **macOS**, and **Windows** (`MEMKIT_MPU=1` alone). Arena virtual backing uses POSIX `mmap` on Unix and `VirtualAlloc` on Windows.
+MPU builds target **embedded Linux services** (Yocto, Buildroot, edge gateways) and MPU dev hosts — not general desktop apps. They enable heap, virtual-memory arenas, growable policies, and **tier-2 C containers** (hashmap, btree, deque, …). Use `EMBEDDED_LINUX=1` on Linux embedded images; **macOS** and **Windows** use `MEMKIT_MPU=1` alone. Arena virtual backing is POSIX `mmap` on Unix and `VirtualAlloc` on Windows.
 
 ```bash
 make mpu
@@ -154,7 +156,17 @@ hashmap_destroy(map);
 arena_destroy(arena);
 ```
 
-C++ MPU: same containers as MCU; use `memkit::memory::mmap_arena` or `heap_arena` for arena-backed init, and growable policies where needed.
+C++ MPU: same 32 utilities as MCU; add `mmap_arena`, `heap_arena`, growable policies, and tier-2 C `*_create` helpers.
+
+```cpp
+#include <memkit/memkit.hpp>
+
+auto backing = memkit::memory::mmap_storage::map(4096u);
+memkit::memory::mmap_arena arena{std::move(backing)};
+
+memkit::Ring<log_line> logs;
+logs.init_from_arena(arena, 32u, memkit::ring_policy::overwrite_on_full);
+```
 
 ### C/C++ parity on MPU
 
@@ -183,8 +195,8 @@ log.init_from_arena(arena, 16u, memkit::ring_policy::overwrite_on_full);
 ```bash
 git clone https://github.com/NetKit-Labs/memkit.git
 cd memkit
-make all          # MCU: lib + tests + examples
-make mpu          # MPU: tier-2 C API + heap arena test + integration test
+make all          # MCU: lib + tests + 4 MCU examples
+make mpu          # MPU: tier-2 C tests + heap arena test + 2 MPU examples + integration test
 ```
 
 ### CMake (in-tree)
@@ -256,6 +268,17 @@ Customers link with **`cc`**, not `c++`, and do not need `-lstdc++`. See [DISTRI
 
 ---
 
+## Examples
+
+| Target | Build | Examples |
+|--------|-------|----------|
+| **MCU** | `make all` | `example_mcu.cpp`, `example_mcu_c.c`, `example_embedded_patterns.cpp`, `example_comm_pipeline.cpp` |
+| **MPU** | `make mpu` | `example_mpu.cpp`, `example_mpu.c` (+ `test_c_api_extended.c` integration test) |
+
+See [README § Examples](../README.md#examples) for what each demo covers.
+
+---
+
 ## Where to go next
 
 - [CONCURRENCY.md](CONCURRENCY.md) — RTOS/ISR contract, lock-free trio, FreeRTOS patterns
@@ -266,5 +289,6 @@ Customers link with **`cc`**, not `c++`, and do not need `-lstdc++`. See [DISTRI
 - [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md) — which container for your use case
 - [DISTRIBUTING_MCU_C.md](DISTRIBUTING_MCU_C.md) — ship prebuilt C API lib without libstdc++
 - [README](../README.md) — complete API reference
-- `examples/example_embedded_patterns.cpp` — DMA, MPSC, calibration, bit streams
-- `examples/example_comm_pipeline.cpp` — ByteRing + SPSC + TokenBucket
+- `examples/example_mpu.cpp`, `examples/example_mpu.c` — MPU virtual arena + tier-2 C path
+- `examples/example_embedded_patterns.cpp` — DMA, MPSC, calibration, bit streams (MCU)
+- `examples/example_comm_pipeline.cpp` — ByteRing + SPSC + TokenBucket (MCU)
