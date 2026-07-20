@@ -6,7 +6,8 @@
  *
  * Targets
  *   MCU (bare-metal): zero-cost STL only; no heap, no mmap, no heap STL via memkit.
- *   MPU (embedded Linux): heap and optional mmap; heap STL optional (MEMKIT_USE_STL).
+ *   MPU (embedded Linux, macOS, Windows host): heap and optional virtual backing;
+ *     heap STL optional (MEMKIT_USE_STL). EMBEDDED_LINUX=1 on Linux; optional elsewhere.
  *
  * Zero-cost STL (std::array, std::span, std::optional, std::less, …) is always
  * available via include/memkit/stl.hpp on both MCU and MPU.

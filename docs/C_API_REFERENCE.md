@@ -6,6 +6,15 @@ Parameter-level reference for the memkit C23 API. For tutorials see [GETTING_STA
 
 Headers are authoritative; this document explains **meaning** of shared fields and functions. Tier-1 containers work on MCU; tier-2 require MPU (`MEMKIT_MPU=1`).
 
+### C/C++ parity
+
+| Surface | C API | C++ API |
+|---------|-------|---------|
+| Arena + 14 containers (ring, queue, vector, …) | **Full** on MPU; tier 1 on MCU | All targets via `memkit.hpp` |
+| 18 embedded helpers (lock-free trio, `ByteRing`, `SmallString`, …) | **None** — use C++ | `memkit.hpp` only |
+
+The 14 C-bound containers delegate to the same `detail/*_core` types as C++. Equivalent `*_config_t` / flags / callbacks produce the same behavior as the matching C++ `init` or `init_from_arena`. C++ `try_*` helpers map to status-based `peek`/`pop` in C. Tier-2 C on MCU links but returns `*_ERR_UNSUPPORTED` — use C++ headers on MCU for those containers.
+
 ---
 
 ## Conventions
@@ -139,7 +148,7 @@ Bump allocator over a caller buffer or MPU heap/mmap backing.
 |------|---------|
 | `ARENA_FLAG_OWNS_BACKING` | `arena_deinit` frees backing |
 | `ARENA_FLAG_DYNAMIC_BACKING` | Backing from heap (MPU) |
-| `ARENA_FLAG_MMAP_BACKING` | Backing from mmap (MPU) |
+| `ARENA_FLAG_MMAP_BACKING` | Backing from virtual memory (MPU): POSIX `mmap` or Windows `VirtualAlloc` via `MEMKIT_MEMORY_MMAP` |
 
 ### Functions
 
@@ -147,7 +156,7 @@ Bump allocator over a caller buffer or MPU heap/mmap backing.
 |----------|------------|---------|
 | `arena_init` | `arena`: out live struct; `config`: backing + flags | Embed arena over caller buffer |
 | `arena_create` | `arena`: out pointer; `backing_bytes`: size | MPU: allocate arena + default backing |
-| `arena_create_with_backing` | `backing`: `USER_BUFFER`, `HEAP`, or `MMAP` | MPU: explicit backing kind |
+| `arena_create_with_backing` | `backing`: `USER_BUFFER`, `HEAP`, or `MMAP` | MPU: explicit backing kind (`MMAP` → `mmap` on POSIX, `VirtualAlloc` on Windows) |
 | `arena_deinit` | Embedded arena | Release; may free backing if owned |
 | `arena_destroy` | Pointer from `arena_create` | Free arena object and owned resources |
 | `arena_reset` | — | Invalidate all bumps; O(1) “free all” |

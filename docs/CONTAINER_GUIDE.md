@@ -1,6 +1,6 @@
 # Which container?
 
-memkit ships **32 C++ utilities** and **14 C containers**. This guide picks by **what you need to do**, not by class name.
+memkit ships **32 C++ utilities** and **14 C containers** (+ `arena_t`). **Parity:** the 14 C-bound types share `detail/*_core` with C++; the other 18 utilities are C++-only (templates, atomics, or fixed-size helpers). See [C/C++ parity](C_API_REFERENCE.md#cc-parity).
 
 **Architecture:** memkit is **zero-overhead and OS-agnostic** — no internal mutexes. Types fall into **lock-free utilities** (`SpscQueue`, `MpscQueue`, `DoubleBuffer` — C++ only, hardware-dependent) and **single-threaded containers** (everything else). See [README § Zero-overhead architecture](../README.md#zero-overhead--os-agnostic-architecture) and [CONCURRENCY.md](CONCURRENCY.md).
 

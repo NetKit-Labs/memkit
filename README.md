@@ -136,14 +136,16 @@ On supported embedded GCC toolchains, linking the lock-free trio may require **`
 
 ### API completeness (v0.2)
 
-The public API is **feature-complete** for embedded use on Unix (macOS and Linux). Every shipped container is listed in the [C++ API reference](#c-api) and [C API reference](#c-api-1) below; authoritative signatures live in the headers.
+The public API is **feature-complete** for embedded use on **MCU and MPU hosts** (Linux, macOS, and Windows). Every shipped container is listed in the [C++ API reference](#c-api) and [C API reference](#c-api-1) below; authoritative signatures live in the headers.
 
 | Surface | Count | MCU | MPU | Notes |
 |---------|-------|-----|-----|-------|
 | C++ utilities | 32 | all | all | `#include <memkit/memkit.hpp>` |
 | C containers | 14 | tier 1 (8) | tier 1 + tier 2 (14) | `#include <memkit.h>` or per-container `*.h` |
-| C arena | 1 | yes | yes | Bump allocator; mmap/heap create on MPU |
-| C++-only helpers | 18 | yes | yes | No C bindings (see [cheat sheet](#container-cheat-sheet)) |
+| C arena | 1 | yes | yes | Bump allocator; heap/mmap create on MPU |
+| C++-only helpers | 18 | yes | yes | No C bindings — see [cheat sheet](#container-cheat-sheet) |
+
+**C/C++ parity:** the **14 C-bound containers** and **`arena_t`** call the same `detail/*_core` implementations as their C++ counterparts — behavior matches when configuration is equivalent (storage, flags, callbacks). **18 utilities** (lock-free trio, `ByteRing`, `SmallString`, …) are **C++-only** by design: templates, typed elements, or hardware atomics without a practical C surface. On MCU, tier-2 C headers link but return `*_ERR_UNSUPPORTED`; use C++ headers for those containers on firmware.
 
 **Tests:** 32 C++ test binaries (including `test_arena_cpp` for arena overflow checks) cover all 32 C++ containers (`Stack` and `Queue` share `test_stack_queue_cpp.cpp`). C API: **8 tier-1 tests** on MCU (`test_arena_c`, `test_ring_c`, … — one per header), **7 tier-2 tests** on MPU, plus **`test_c_api_extended.c`** (shared `arena_create` + all `*_create` helpers on one arena). MPU also runs **`test_heap_arena_cpp`** (`heap_arena` + arena-backed ring).
 
@@ -162,12 +164,12 @@ For **why** MCU and MPU exist and how to choose memory models, see [Design philo
 
 memkit distinguishes two build targets (see `include/memkit_config.h`):
 
-| | **MCU** (bare-metal) | **MPU** (embedded Linux) |
-|--|----------------------|--------------------------|
-| Default define | `MEMKIT_MCU=1` | `MEMKIT_MPU=1`, `EMBEDDED_LINUX=1` |
+| | **MCU** (bare-metal) | **MPU** (embedded Linux, macOS, Windows host) |
+|--|----------------------|-----------------------------------------------|
+| Default define | `MEMKIT_MCU=1` | `MEMKIT_MPU=1` (+ `EMBEDDED_LINUX=1` on Linux; optional elsewhere) |
 | Heap (`malloc`) | off | on (`MEMKIT_ALLOW_HEAP=1`) |
-| mmap arena | off | on (`MEMKIT_ALLOW_MMAP=1`) |
-| Default arena backing | caller buffer | mmap |
+| Virtual arena backing | off | on (`MEMKIT_ALLOW_MMAP=1`) — POSIX `mmap` or Windows `VirtualAlloc` |
+| Default arena backing | caller buffer | virtual memory (when enabled) |
 | C API tier 2 | stubbed (`*_ERR_UNSUPPORTED`) | full |
 | C++ containers | all | all |
 | Heap STL via memkit | no (`MEMKIT_ALLOW_HEAP_STL=0`) | optional (`MEMKIT_USE_STL=1` → `memkit::stl::vector`, `string`) |
@@ -186,7 +188,7 @@ Containers can store elements in several ways. The same options exist in C (flag
 | Fixed pool | slab / pool storage | `ObjPool<T>` / `objpool_t` | yes | yes |
 | Arena | `arena_t *` + `*_FLAG_ARENA_STORAGE` | `init_from_arena(arena, …)` | yes | yes |
 | Heap | `*_FLAG_DYNAMIC_STORAGE` (create helpers) | heap arena / growable | no | yes |
-| mmap | arena with mmap backing | `memory::mmap_arena` | no | yes |
+| mmap / VirtualAlloc | arena with virtual backing | `memory::mmap_arena` | no | yes (Linux/macOS: `mmap`; Windows: `VirtualAlloc`) |
 
 **Arena** is a bump allocator: fast sequential allocation, reset the whole arena in one call. Good for short-lived batches of container storage.
 
@@ -223,7 +225,7 @@ On **Windows MPU**, `MEMKIT_MPU=ON` enables arena virtual backing via `VirtualAl
 
 MPU builds also produce `example_mpu` (C++) and `example_mpu_c` (C).
 
-Link against the static library built from `src/arena.cpp`, `src/mmap_backing.cpp`, and `src/c_api/bindings.cpp`. Add `-Iinclude`, `-DMEMKIT_MCU=1` or `-DMEMKIT_MPU=1 -DEMBEDDED_LINUX=1`, and **`-fno-exceptions -fno-rtti`** when compiling C++ against memkit headers.
+Link against the static library built from `src/arena.cpp`, `src/mmap_backing.cpp`, and `src/c_api/bindings.cpp`. Add `-Iinclude`, `-DMEMKIT_MCU=1` (MCU) or `-DMEMKIT_MPU=1` with `-DEMBEDDED_LINUX=1` on embedded Linux (Windows/macOS MPU: `-DMEMKIT_MPU=1` alone is enough), and **`-fno-exceptions -fno-rtti`** when compiling C++ against memkit headers.
 
 ---
 
@@ -827,6 +829,14 @@ benchmarks/
 
 Both APIs call the same `detail/*_core` implementations; behavior matches when configuration is equivalent.
 
+**Parity summary**
+
+| C++ surface | C API | Notes |
+|-------------|-------|-------|
+| 14 sequential/map containers + `arena_t` | Full (tier 1 + tier 2 on MPU) | Same cores; C uses `void*` + callbacks |
+| 18 embedded helpers (lock-free trio, `ByteRing`, …) | — | C++ only — see [cheat sheet](#container-cheat-sheet) |
+| Tier 2 on MCU | Stubs link; `*_ERR_UNSUPPORTED` | Use C++ headers on MCU for hashmap, list, … |
+
 ### STL policy (`memkit/stl.hpp`)
 
 | Build | Available via memkit | Blocked |
@@ -849,6 +859,7 @@ GitHub Actions (`.github/workflows/ci.yml`):
 | `mpu-asan-ubuntu` | MPU + ASan/UBSan |
 | `cmake-mcu-ubuntu` | CMake MCU — `ctest` |
 | `cmake-ubuntu` | CMake MPU — `ctest` |
+| `mpu-windows` | LLVM Clang on Windows — `-DMEMKIT_MPU=ON`, `ctest` (VirtualAlloc arena backing) |
 | `benchmark-ubuntu` | `make benchmark` (timing + size) |
 | `macos` | Apple Clang — MCU + MPU + benchmarks |
 
@@ -884,7 +895,7 @@ memkit is intentionally slightly slower than a one-off C ring — you trade a fe
 | `example_embedded_patterns.cpp` | C++ | DoubleBuffer, MpscQueue, LookupTable, bit stream, MovingAverage |
 | `example_comm_pipeline.cpp` | C++ | ByteRing RX, SpscQueue, TokenBucket pacing |
 
-MPU examples: `example_mpu.cpp` (C++ mmap arena), `example_mpu.c` (C arena create + tier-2 create helpers). Built with `make mpu`.
+MPU examples: `example_mpu.cpp` (C++ virtual-memory arena), `example_mpu.c` (C arena create + tier-2 create helpers). Built with `make mpu`. On Windows MPU, arena backing uses `VirtualAlloc`.
 
 ---
 

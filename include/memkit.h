@@ -5,7 +5,7 @@
  * memkit C23 API umbrella header.
  *
  * C API tiers (see memkit_config.h):
- *   Tier 1 — ring, vector, stack, queue, bitset, objpool, arena (MCU + MPU)
+ *   Tier 1 — arena, ring, vector, stack, queue, bitset, objpool, handle_pool (MCU + MPU)
  *   Tier 2 — hashmap, btree, pqueue, list, dlist, lrucache, deque (MPU only;
  *            MCU builds stub init/create with *_ERR_UNSUPPORTED)
  *

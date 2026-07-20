@@ -35,6 +35,10 @@ enum class status : std::uint8_t {
 
 Same semantics as C `*_status_t` (see [C_API_REFERENCE.md](C_API_REFERENCE.md)).
 
+### C/C++ parity
+
+Every utility in `memkit.hpp` either has a **C binding** (14 containers + `arena_t`, same `detail/*_core`) or is **C++-only** (18 helpers). See the parity table in [C_API_REFERENCE.md](C_API_REFERENCE.md#cc-parity) and the [README cheat sheet](../README.md#container-cheat-sheet).
+
 ### Ownership
 
 - Move-only; no copy constructor.
@@ -216,7 +220,8 @@ Many of these require `storage_bytes()` / `storage_align()` static helpers — s
 | `arena<Backing>` | Bump allocator template |
 | `static_arena` | `arena<fixed_buffer>` alias |
 | `heap_arena` | MPU: arena over `heap_storage` |
-| `mmap_arena` | MPU: arena over `mmap_storage` |
+| `mmap_arena` | MPU: arena over `mmap_storage` (POSIX `mmap`; Windows `VirtualAlloc`) |
+| `mmap_storage` | Page-rounded virtual backing; `map` / `unmap` |
 
 C++ `memory::static_arena` is header-only. C `arena_t` API is in [`arena.h`](../include/arena.h) + `src/arena.cpp`.
 

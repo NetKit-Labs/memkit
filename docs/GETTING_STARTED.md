@@ -10,7 +10,7 @@ This guide walks through the **80% path** most firmware projects need: static st
 | STL vs memkit, MCU/MPU flags, vendoring one container | [Adoption guide](ADOPTION_GUIDE.md) |
 | C firmware, bare-metal (MCU) | [C on MCU](#c-on-mcu-tier-1) |
 | C++ firmware, bare-metal | [C++ on MCU](#c-on-mcu) |
-| Embedded Linux (MPU) | [MPU heap / mmap](#mpu-embedded-linux) |
+| Embedded Linux / macOS / Windows (MPU) | [MPU builds](#mpu-host-and-embedded-linux) |
 | Choosing a container | [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md) |
 | RTOS, ISR, or multi-task sharing | [CONCURRENCY.md](CONCURRENCY.md) |
 
@@ -128,9 +128,9 @@ arena_deinit(&arena);
 
 ---
 
-## MPU (embedded Linux)
+## MPU (host and embedded Linux)
 
-MPU builds enable heap, mmap arenas, and tier-2 C containers (hashmap, btree, deque, …).
+MPU builds enable heap, virtual-memory arenas, and tier-2 C containers (hashmap, btree, deque, …). Supported on **embedded Linux** (`EMBEDDED_LINUX=1`), **macOS**, and **Windows** (`MEMKIT_MPU=1` alone). Arena virtual backing uses POSIX `mmap` on Unix and `VirtualAlloc` on Windows.
 
 ```bash
 make mpu
@@ -138,13 +138,13 @@ make mpu
 ./build/example_mpu_c
 ```
 
-Typical MPU pattern — mmap-backed arena and `*_create`:
+Typical MPU pattern — virtual-memory arena and `*_create`:
 
 ```c
 #include <memkit.h>
 
 arena_t *arena = NULL;
-arena_create(&arena, 262144u);
+arena_create(&arena, 262144u);   /* default virtual backing on MPU */
 
 hashmap_t *map = NULL;
 hashmap_create(&map, sizeof(uint32_t), sizeof(int32_t), 16u,
@@ -155,6 +155,10 @@ arena_destroy(arena);
 ```
 
 C++ MPU: same containers as MCU; use `memkit::memory::mmap_arena` or `heap_arena` for arena-backed init, and growable policies where needed.
+
+### C/C++ parity on MPU
+
+All **14 C containers** and **`arena_t`** are available with full tier-2 support on MPU. They delegate to the same cores as C++. The **18 C++-only utilities** (lock-free trio, `ByteRing`, …) require `#include <memkit/memkit.hpp>` — there are no C bindings. See [C API reference — parity](C_API_REFERENCE.md#cc-parity).
 
 **Heap-backed arena (C++):**
 

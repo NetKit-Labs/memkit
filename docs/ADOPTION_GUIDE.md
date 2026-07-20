@@ -80,6 +80,19 @@ Full picker: [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md).
 
 ---
 
+## C/C++ API parity
+
+| Layer | Count | C API | C++ API |
+|-------|-------|-------|---------|
+| Core containers + arena | 15 (14 + `arena_t`) | Tier 1 on MCU; full on MPU | All targets |
+| Embedded helpers | 18 | — | C++ only |
+
+The 15 C-bound types share `detail/*_core` with C++. Configure equivalent storage, flags, and callbacks in C to get the same behavior as C++ `init` / `init_from_arena`. Tier-2 C on MCU links but returns `*_ERR_UNSUPPORTED` — use C++ headers on firmware for hashmap, list, deque, etc.
+
+Windows MPU is supported (`MEMKIT_MPU=1`, VirtualAlloc arena backing). CI runs `mpu-windows` on LLVM Clang.
+
+---
+
 ## Build targets: MCU vs MPU
 
 Authoritative flags: [`include/memkit_config.h`](../include/memkit_config.h).
@@ -183,7 +196,8 @@ Best when you want CMake/FetchContent or the stock Makefile and multiple contain
 
 ```bash
 cmake -B build                           # MCU
-cmake -B build -DMEMKIT_EMBEDDED_LINUX=ON   # MPU
+cmake -B build -DMEMKIT_EMBEDDED_LINUX=ON   # MPU on embedded Linux
+cmake -B build -DMEMKIT_MPU=ON              # MPU (Linux, macOS, Windows)
 cmake --build build
 ```
 

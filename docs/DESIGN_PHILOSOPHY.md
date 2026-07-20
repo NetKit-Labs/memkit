@@ -39,11 +39,11 @@ memkit splits the world into **MCU** (bare-metal firmware) and **MPU** (embedded
 
 | | **MCU** | **MPU** |
 |--|---------|---------|
-| **Typical platform** | Cortex-M, bare-metal, RTOS | Linux on ARM/x64, Yocto, etc. |
-| **Define** | `MEMKIT_MCU=1` | `MEMKIT_MPU=1`, `EMBEDDED_LINUX=1` |
+| **Typical platform** | Cortex-M, bare-metal, RTOS | Embedded Linux, macOS/Windows host MPU builds |
+| **Define** | `MEMKIT_MCU=1` | `MEMKIT_MPU=1` (+ `EMBEDDED_LINUX=1` on Linux; optional on Windows/macOS) |
 | **Heap inside memkit** | off | on (`MEMKIT_ALLOW_HEAP=1`) |
-| **mmap arenas** | off | on (`MEMKIT_ALLOW_MMAP=1`) |
-| **Default arena backing** | caller fixed buffer | mmap |
+| **Virtual arena backing** | off | on (`MEMKIT_ALLOW_MMAP=1`) — `mmap` or `VirtualAlloc` |
+| **Default arena backing** | caller fixed buffer | virtual memory when enabled |
 | **C API tier 2** | stubbed (`*_ERR_UNSUPPORTED`) | full |
 | **C++ containers** | all 32 utilities | all 32 utilities |
 | **Heap STL via memkit** | blocked (`MEMKIT_USE_STL=1` is a compile error) | optional off by default |
@@ -78,7 +78,7 @@ Containers never own heap storage **unless you ask** (MPU) or use growable/creat
 | **Fixed pool** | Slab + free-list metadata | Same-sized objects, reuse slots (`ObjPool`, list node pools) | ✓ | ✓ |
 | **Arena** | Bump allocator over your buffer | Several containers; reset together | ✓ | ✓ |
 | **Heap** | `malloc` / growable reallocation | Unknown size at compile time | — | ✓ |
-| **mmap** | OS-backed arena | Large MPU services | — | ✓ |
+| **mmap** | OS-backed arena | Large MPU services | — | ✓ (POSIX `mmap` or Windows `VirtualAlloc`) |
 
 ### Fixed buffer (the 80% path)
 
