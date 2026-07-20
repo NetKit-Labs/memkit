@@ -16,7 +16,7 @@
  *   MEMKIT_MEMORY_FIXED_POOL    fixed-size object slab
  *   MEMKIT_MEMORY_ARENA         bump allocator (default backing for both targets)
  *   MEMKIT_MEMORY_HEAP          malloc/free (MPU only)
- *   MEMKIT_MEMORY_MMAP          mmap-backed arena (MPU only, optional)
+ *   MEMKIT_MEMORY_MMAP          virtual-memory arena backing (MPU only: mmap or VirtualAlloc)
  *
  * Design rationale: docs/DESIGN_PHILOSOPHY.md
  */

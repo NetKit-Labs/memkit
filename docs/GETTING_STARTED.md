@@ -187,10 +187,13 @@ make mpu          # MPU: tier-2 C API + heap arena test + integration test
 
 ```bash
 cmake -B build                           # MCU
-cmake -B build -DMEMKIT_EMBEDDED_LINUX=ON   # MPU
+cmake -B build -DMEMKIT_EMBEDDED_LINUX=ON   # MPU on embedded Linux
+cmake -B build -DMEMKIT_MPU=ON              # MPU (Linux, macOS, Windows)
 cmake --build build
 ctest --test-dir build
 ```
+
+On Windows, `-DMEMKIT_MPU=ON` uses `VirtualAlloc` for arena backing (no `EMBEDDED_LINUX` required).
 
 ### CMake (FetchContent)
 
@@ -224,7 +227,7 @@ Customers link with **`cc`**, not `c++`, and do not need `-lstdc++`. See [DISTRI
 
 ### Firmware checklist
 
-1. Add `-DMEMKIT_MCU=1` (or `MEMKIT_MPU=1` + `EMBEDDED_LINUX=1` on Linux).
+1. Add `-DMEMKIT_MCU=1` (MCU), or `-DMEMKIT_MPU=1` with `EMBEDDED_LINUX=1` on embedded Linux, or `-DMEMKIT_MPU=1` alone on Windows/macOS host MPU builds.
 2. For C++ firmware, compile with **`-fno-exceptions -fno-rtti`** (set automatically by Makefile/CMake).
 3. Link the static `memkit` library (`arena.cpp`, `mmap_backing.cpp`, `c_api/bindings.cpp`).
 4. Include `<memkit/memkit.hpp>` (C++) or `<memkit.h>` / individual `*.h` (C). All C headers include `memkit_config.h` for target flags.

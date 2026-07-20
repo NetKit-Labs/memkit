@@ -84,9 +84,9 @@ Full picker: [CONTAINER_GUIDE.md](CONTAINER_GUIDE.md).
 
 Authoritative flags: [`include/memkit_config.h`](../include/memkit_config.h).
 
-| | **MCU** (bare-metal / RTOS firmware) | **MPU** (embedded Linux) |
-|--|--------------------------------------|---------------------------|
-| **Define** | `MEMKIT_MCU=1` | `MEMKIT_MPU=1` and `EMBEDDED_LINUX=1` |
+| | **MCU** (bare-metal / RTOS firmware) | **MPU** (embedded Linux, macOS, Windows host) |
+|--|--------------------------------------|-----------------------------------------------|
+| **Define** | `MEMKIT_MCU=1` | `MEMKIT_MPU=1` (+ `EMBEDDED_LINUX=1` on Linux; optional on Windows/macOS) |
 | **Heap inside memkit** | off (`MEMKIT_ALLOW_HEAP=0`) | on (`MEMKIT_ALLOW_HEAP=1`) |
 | **mmap arenas** | off | on (`MEMKIT_ALLOW_MMAP=1`, can disable) |
 | **Default arena backing** | caller fixed buffer | mmap |
@@ -118,10 +118,16 @@ For C++ firmware also:
 -fno-exceptions -fno-rtti
 ```
 
-**MPU:**
+**MPU (Linux embedded):**
 
 ```text
 -DMEMKIT_MPU=1 -DEMBEDDED_LINUX=1 -DMEMKIT_ALLOW_HEAP=1 -DMEMKIT_ALLOW_MMAP=1 -I/path/to/memkit/include
+```
+
+**MPU (Windows / macOS host):**
+
+```text
+-DMEMKIT_MPU=1 -DMEMKIT_ALLOW_HEAP=1 -DMEMKIT_ALLOW_MMAP=1 -I/path/to/memkit/include
 ```
 
 **MPU + optional heap STL aliases** (application convenience only):
@@ -130,7 +136,7 @@ For C++ firmware also:
 -DMEMKIT_USE_STL=1
 ```
 
-**CMake:** `-DMEMKIT_EMBEDDED_LINUX=ON` for MPU; `-DMEMKIT_USE_STL=ON` for heap STL aliases.
+**CMake:** `-DMEMKIT_EMBEDDED_LINUX=ON` for MPU on embedded Linux; `-DMEMKIT_MPU=ON` for MPU on any host (including Windows VirtualAlloc backing); `-DMEMKIT_USE_STL=ON` for heap STL aliases.
 
 ---
 

@@ -247,13 +247,12 @@ C opaque blobs (`ring_t.bytes[MEMKIT_RING_OBJ_BYTES]`) hide layout; sizes are ch
 
 ## What memkit deliberately is not
 
-- **Not** a host desktop framework — MPU support targets embedded Linux, not “any OS”
+- **Not** a host desktop framework — MPU support targets embedded Linux and similar MPU hosts (including Windows with VirtualAlloc arena backing); MCU remains bare-metal/RTOS focused
 - **Not** exception-driven — status codes throughout
 - **Not** implicitly growable on MCU — capacity is a contract
 - **Not** thread-safe by default — lock-free trio (wait-free / lock-free) plus single-threaded containers; see [CONCURRENCY.md](CONCURRENCY.md)
 - **Not** RTOS-coupled — no built-in mutex layer; integrator-owned OS synchronization for shared single-threaded types
 - **Not** one-size API surface in C — tier 1 stays small; full C++ surface lives in headers
-- **Not** Windows-ready yet — see README future work
 
 ---
 

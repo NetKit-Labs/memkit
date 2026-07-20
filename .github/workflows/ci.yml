@@ -171,6 +171,47 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  mpu-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache LLVM 21
+        uses: actions/cache@v4
+        id: cache-llvm
+        with:
+          path: llvm
+          key: llvm-21-${{ runner.os }}-v1
+      - name: Install LLVM 21 (C++26)
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "21"
+          directory: ${{ github.workspace }}/llvm
+      - name: Configure (MPU, Clang)
+        shell: bash
+        run: |
+          echo "${{ github.workspace }}/llvm/bin" >> "$GITHUB_PATH"
+          cmake -B build-mpu -G Ninja \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DMEMKIT_MPU=ON \
+            -DMEMKIT_ALLOW_MMAP=ON
+      - name: Build
+        run: cmake --build build-mpu
+      - name: Test
+        run: ctest --test-dir build-mpu -C Debug --output-on-failure
+
+  mpu-windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (MPU, MSVC)
+        run: cmake -B build-msvc -DMEMKIT_MPU=ON -DMEMKIT_ALLOW_MMAP=ON
+      - name: Build
+        run: cmake --build build-msvc --config Release
+      - name: Test
+        run: ctest --test-dir build-msvc -C Release --output-on-failure
+
   benchmark-ubuntu:
     runs-on: ubuntu-latest
     steps:

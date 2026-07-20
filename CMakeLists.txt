@@ -9,29 +9,46 @@ set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# memkit does not use exceptions or RTTI; enforce project-wide on all C++ targets.
-add_compile_options(
-    "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>"
-    "$<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>"
-)
+# memkit does not use exceptions or RTTI (GCC/Clang: -fno-*; MSVC: /GR- /EHsc-).
+if(MSVC)
+    add_compile_options(
+        "$<$<COMPILE_LANGUAGE:CXX>:/EHsc->"
+        "$<$<COMPILE_LANGUAGE:CXX>:/GR->"
+    )
+else()
+    add_compile_options(
+        "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>"
+        "$<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>"
+    )
+endif()
 
-option(MEMKIT_EMBEDDED_LINUX "Build for MPU (embedded Linux): heap + optional mmap" OFF)
-option(MEMKIT_ALLOW_MMAP "Enable mmap-backed arena on MPU" ON)
+# MPU: heap + virtual arena backing (POSIX mmap or Windows VirtualAlloc).
+option(MEMKIT_MPU "Build for MPU target (heap + optional arena virtual backing)" OFF)
+# Embedded Linux MPU (sets EMBEDDED_LINUX=1). Implies MEMKIT_MPU.
+option(MEMKIT_EMBEDDED_LINUX "MPU on embedded Linux (alias: sets EMBEDDED_LINUX=1)" OFF)
+option(MEMKIT_ALLOW_MMAP "Enable virtual-memory arena backing on MPU" ON)
 option(MEMKIT_USE_STL "MPU only: expose std::vector/string aliases in memkit/stl.hpp" OFF)
 
 if(MEMKIT_EMBEDDED_LINUX)
-    add_compile_definitions(MEMKIT_MPU=1 EMBEDDED_LINUX=1)
-else()
-    add_compile_definitions(MEMKIT_MCU=1)
+    set(MEMKIT_MPU ON)
 endif()
 
-if(MEMKIT_ALLOW_MMAP AND MEMKIT_EMBEDDED_LINUX)
-    add_compile_definitions(MEMKIT_ALLOW_MMAP=1)
-endif()
-
-if(MEMKIT_USE_STL AND MEMKIT_EMBEDDED_LINUX)
-    add_compile_definitions(MEMKIT_USE_STL=1)
-endif()
+function(memkit_apply_public_config target)
+    if(MEMKIT_MPU)
+        target_compile_definitions(${target} PUBLIC MEMKIT_MPU=1)
+        if(MEMKIT_EMBEDDED_LINUX)
+            target_compile_definitions(${target} PUBLIC EMBEDDED_LINUX=1)
+        endif()
+        if(NOT MEMKIT_ALLOW_MMAP)
+            target_compile_definitions(${target} PUBLIC MEMKIT_ALLOW_MMAP=0)
+        endif()
+        if(MEMKIT_USE_STL)
+            target_compile_definitions(${target} PUBLIC MEMKIT_USE_STL=1)
+        endif()
+    else()
+        target_compile_definitions(${target} PUBLIC MEMKIT_MCU=1)
+    endif()
+endfunction()
 
 add_library(memkit STATIC
     src/arena.cpp
@@ -40,12 +57,7 @@ add_library(memkit STATIC
 )
 
 target_include_directories(memkit PUBLIC include)
-
-if(MEMKIT_EMBEDDED_LINUX)
-    target_compile_definitions(memkit PUBLIC MEMKIT_MPU=1 EMBEDDED_LINUX=1)
-else()
-    target_compile_definitions(memkit PUBLIC MEMKIT_MCU=1)
-endif()
+memkit_apply_public_config(memkit)
 
 add_executable(example_mcu examples/example_mcu.cpp)
 target_link_libraries(example_mcu PRIVATE memkit)
@@ -59,7 +71,7 @@ target_link_libraries(example_comm_pipeline PRIVATE memkit)
 add_executable(example_mcu_c examples/example_mcu_c.c)
 target_link_libraries(example_mcu_c PRIVATE memkit)
 
-if(MEMKIT_EMBEDDED_LINUX)
+if(MEMKIT_MPU)
     add_executable(example_mpu examples/example_mpu.cpp)
     target_link_libraries(example_mpu PRIVATE memkit)
 

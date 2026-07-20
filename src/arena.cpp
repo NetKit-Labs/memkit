@@ -11,9 +11,6 @@
 
 #if MEMKIT_ALLOW_MMAP
 #include "memkit/memory/mmap.hpp"
-#ifndef _WIN32
-#include <sys/mman.h>
-#endif
 #endif
 
 static bool arena_ptr_is_valid(const arena_t *arena)
@@ -40,9 +37,10 @@ static void arena_release_backing(arena_t *arena)
 
 #if MEMKIT_ALLOW_MMAP
     if ((arena->flags & ARENA_FLAG_MMAP_BACKING) != 0u) {
-#ifndef _WIN32
-        munmap(arena->base, arena->capacity_bytes);
-#endif
+        memkit::memory::mmap_storage::unmap(
+            reinterpret_cast<std::byte*>(arena->base),
+            arena->capacity_bytes
+        );
         return;
     }
 #endif

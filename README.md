@@ -213,10 +213,13 @@ make clean
 
 ```bash
 cmake -B build                           # MCU (default)
-cmake -B build -DMEMKIT_EMBEDDED_LINUX=ON   # MPU
+cmake -B build -DMEMKIT_EMBEDDED_LINUX=ON   # MPU on embedded Linux
+cmake -B build -DMEMKIT_MPU=ON              # MPU (Linux, macOS, or Windows)
 cmake --build build
 ctest --test-dir build
 ```
+
+On **Windows MPU**, `MEMKIT_MPU=ON` enables arena virtual backing via `VirtualAlloc` (no `EMBEDDED_LINUX` required). MSVC uses `/GR-` and `/EHsc-`; Clang/GCC use `-fno-exceptions -fno-rtti`.
 
 MPU builds also produce `example_mpu` (C++) and `example_mpu_c` (C).
 
@@ -892,6 +895,3 @@ Not required for the current v0.2 feature set; possible follow-ups if demand app
 | Area | Description |
 |------|-------------|
 | **Exhaustive unit / fuzz / concurrency tests** | C++ and C API tests are happy-path smoke/integration coverage. Deeper work would add multi-threaded MPSC/SPSC stress tests, systematic error-path cases, fuzz/property tests, and shared C/C++ scenario equivalence checks. |
-| **Windows support** | `VirtualAlloc`/`VirtualFree` for the mmap arena path, MSVC/clang-cl CI, and CMake-first host builds. Core MCU containers are already portable; the gap is MPU optional backing and toolchain plumbing. |
-
----
