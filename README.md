@@ -1,21 +1,28 @@
 # memkit
 
-Embedded-friendly containers for C and C++ with a single shared implementation per container family. C++ templates are the primary API; the C API is a thin, type-erased layer over the same cores.
+Embedded-friendly containers for C and C++ — **bare-metal MCU firmware and MPU hosts** (embedded Linux, RTOS-adjacent services, edge gateways). One shared implementation per container family; C++ templates are the primary API, with a thin type-erased C layer over the same cores.
 
 **New here?** [Getting started](docs/GETTING_STARTED.md) · [Adoption guide](docs/ADOPTION_GUIDE.md) · [Concurrency & RTOS](docs/CONCURRENCY.md) · [C API reference](docs/C_API_REFERENCE.md) · [C++ API reference](docs/CXX_API_REFERENCE.md) · [Design philosophy](docs/DESIGN_PHILOSOPHY.md) · [Which container?](docs/CONTAINER_GUIDE.md) · [Bare-metal C lib](docs/DISTRIBUTING_MCU_C.md)
 
 ## Quick start
 
+memkit is built for **embedded systems in two deployment models** — not “MCU only with optional Linux.” Both get the full **32 C++ utilities**; the difference is what memory the platform allows (static/arena vs heap/virtual backing) and how much of the **C API** is linked in.
+
+| Target | Typical platform | Default build | What you gain |
+|--------|------------------|---------------|---------------|
+| **MCU** | Cortex-M, bare-metal, RTOS firmware | `make all` | Static/arena storage, smallest tier-1 C image, no heap inside memkit |
+| **MPU** | Embedded Linux (Yocto, Buildroot), edge gateway, dev host | `make mpu` | Heap + virtual arena backing, full tier-2 C API, growable containers |
+
 ```bash
-make all              # lib + 32 C++ tests + 8 C API tests + 4 MCU examples
+make all              # MCU: lib + 32 C++ tests + 8 C API tests + 4 MCU examples
+make mpu              # MPU: tier-2 C API tests + heap arena test + MPU examples
 make benchmark        # timing + size vs hand-rolled C
 make test_c_api       # tier-1 C API tests (MCU)
 make lib-mcu-c        # freestanding libmemkit_mcu_c.a (C customers, no libstdc++)
-make mpu              # MPU: examples + tier-2 C API tests + integration test
 make clean
 ```
 
-**C++ — static ring on MCU:**
+**MCU — static ring (C++):**
 
 ```cpp
 #include <memkit/memkit.hpp>
@@ -26,7 +33,7 @@ ring.init(storage);
 ring.push_back(42);
 ```
 
-**C — static ring on MCU** ([`memkit_helpers.h`](include/memkit_helpers.h) macros included via `memkit.h`):
+**MCU — static ring (C):**
 
 ```c
 #include <memkit.h>
@@ -41,7 +48,34 @@ ring_push_back(&ring, &value);
 ring_deinit(&ring);
 ```
 
-See [Build](#build), [Design philosophy](docs/DESIGN_PHILOSOPHY.md), [C++ API](#c-api), and [C API](#c-api-1) below for full details.
+**MPU — virtual-memory arena + arena-owned ring (C++):**
+
+```cpp
+#include <memkit/memkit.hpp>
+
+auto backing = memkit::memory::mmap_storage::map(4096u);  /* mmap or VirtualAlloc */
+memkit::memory::mmap_arena arena{std::move(backing)};
+
+memkit::Ring<log_line> logs;
+logs.init_from_arena(arena, 32u, memkit::ring_policy::overwrite_on_full);
+```
+
+**MPU — default arena + `*_create` helpers (C):**
+
+```c
+#include <memkit.h>
+
+arena_t *arena = NULL;
+arena_create(&arena, 4096u);   /* virtual backing by default on MPU */
+
+ring_t *logs = NULL;
+ring_create(&logs, sizeof(log_line_t), 32u, NULL, RING_FLAG_OVERWRITE_ON_FULL);
+/* … use tier-1/2 containers … */
+ring_destroy(logs);
+arena_destroy(arena);
+```
+
+See [Build](#build), [Targets](#targets), [Examples](#examples), [Design philosophy](docs/DESIGN_PHILOSOPHY.md), [C++ API](#c-api), and [C API](#c-api-1) below.
 
 ## Design
 
@@ -153,19 +187,24 @@ Pick the API that fits your project:
 
 | Use case | API |
 |----------|-----|
-| Firmware (C), small image, tier-1 containers | C API tier 1 |
-| Firmware (C++), all containers, static/arena storage | `#include <memkit/memkit.hpp>` |
-| Embedded Linux (C or C++), heap/mmap | Either API; tier 2 available in C |
+| Bare-metal firmware (C), smallest image | C API tier 1 + `libmemkit_mcu_c.a` |
+| Bare-metal / RTOS firmware (C++) | `#include <memkit/memkit.hpp>` — all 32 utilities, static/arena |
+| Embedded Linux service (C or C++) | Either API; **tier 2 in C**; heap/virtual arena on MPU |
+| Edge gateway / MPU SoC with Linux | `make mpu` — hashmap, growable vector, `arena_create`, … |
 | Mixed C/C++ codebase | C API from C; C++ templates from C++ |
+| Host dev / CI against MPU build | `-DMEMKIT_MPU=ON` (Linux, macOS, Windows) |
 
 ## Targets
 
-For **why** MCU and MPU exist and how to choose memory models, see [Design philosophy](docs/DESIGN_PHILOSOPHY.md). Quick reference:
+For **why** MCU and MPU exist and how to choose memory models, see [Design philosophy](docs/DESIGN_PHILOSOPHY.md).
+
+**Both targets are first-class.** MCU is the **default Makefile build** because it is the most constrained environment (no heap, smallest link image) — not because MPU is secondary. If you ship on embedded Linux or an MPU-class SoC with `malloc` and virtual memory, use **`make mpu`** or `-DMEMKIT_MPU=ON`. The same headers and container cores apply; compile-time flags gate heap, virtual arena backing, and tier-2 C bindings.
 
 memkit distinguishes two build targets (see `include/memkit_config.h`):
 
-| | **MCU** (bare-metal) | **MPU** (embedded Linux, macOS, Windows host) |
-|--|----------------------|-----------------------------------------------|
+| | **MCU** (bare-metal / RTOS) | **MPU** (embedded Linux, edge gateway, dev host) |
+|--|-----------------------------|--------------------------------------------------|
+| **Typical use** | Sensor node, motor controller, radio MCU | Linux service, protocol stack, logging daemon, CI/dev |
 | Default define | `MEMKIT_MCU=1` | `MEMKIT_MPU=1` (+ `EMBEDDED_LINUX=1` on Linux; optional elsewhere) |
 | Heap (`malloc`) | off | on (`MEMKIT_ALLOW_HEAP=1`) |
 | Virtual arena backing | off | on (`MEMKIT_ALLOW_MMAP=1`) — POSIX `mmap` or Windows `VirtualAlloc` |
@@ -174,9 +213,9 @@ memkit distinguishes two build targets (see `include/memkit_config.h`):
 | C++ containers | all | all |
 | Heap STL via memkit | no (`MEMKIT_ALLOW_HEAP_STL=0`) | optional (`MEMKIT_USE_STL=1` → `memkit::stl::vector`, `string`) |
 
-**MCU** builds are sized for firmware: no heap inside memkit, zero-cost STL only (`std::array`, `std::span`, `std::optional`, `std::string_view`, … via `memkit/stl.hpp`). Setting `MEMKIT_USE_STL=1` on MCU is a compile error.
+**MCU** builds are sized for firmware: no heap inside memkit, zero-cost STL only (`std::array`, `std::span`, `std::optional`, `std::string_view`, … via `memkit/stl.hpp`). Setting `MEMKIT_USE_STL=1` on MCU is a compile error. Tier-1 C API + `libmemkit_mcu_c.a` target the smallest pure-C firmware images.
 
-**MPU** builds add heap allocation, mmap-backed arenas, and the full C API. Optional heap STL aliases (`memkit::stl::vector`, `memkit::stl::string`) are available only when `MEMKIT_USE_STL=1` (CMake: `-DMEMKIT_USE_STL=ON`). Core containers never use heap STL internally.
+**MPU** builds target **embedded Linux and similar MPU hosts** — not a general desktop app framework, but the same class of product where you run a Linux userspace service on an ARM/x64 SoC with heap and virtual memory. They add heap allocation, virtual arena backing (`mmap` / `VirtualAlloc`), the **full tier-2 C API** (hashmap, deque, list, …), and growable container policies. Optional heap STL aliases (`memkit::stl::vector`, `memkit::stl::string`) are available only when `MEMKIT_USE_STL=1` (CMake: `-DMEMKIT_USE_STL=ON`). Core containers never use heap STL internally.
 
 ## Memory models
 
@@ -284,6 +323,22 @@ All types live in namespace `memkit`. Operations return `memkit::status` unless 
 **Memory helpers** (`memkit/memory/`): `fixed_buffer`, `static_arena`; on MPU also `heap_arena`, `mmap_arena`, `mmap_storage`, `heap_storage`.
 
 Type alias: `memkit::Arena<…>`.
+
+### Typical MPU pattern (embedded Linux)
+
+From `examples/example_mpu.cpp` — virtual-memory arena and growable/owned storage paths that are unavailable on MCU:
+
+```cpp
+#include <memkit/memkit.hpp>
+
+auto backing = memkit::memory::mmap_storage::map(4096u);
+memkit::memory::mmap_arena arena{std::move(backing)};
+
+memkit::Ring<log_line> logs;
+logs.init_from_arena(arena, 32u, memkit::ring_policy::overwrite_on_full);
+```
+
+On MPU you can also use `heap_arena`, growable `vector_policy` / `queue_policy`, and the full C tier-2 surface (`hashmap_create`, `deque_create`, …). See [Examples — MPU](#mpu--embedded-linux--capable-host).
 
 ### Typical MCU pattern (static storage)
 
@@ -886,16 +941,43 @@ memkit is intentionally slightly slower than a one-off C ring — you trade a fe
 
 ---
 
-## Examples (MCU)
+## Examples
+
+Runnable programs live in `examples/`. **MCU examples** build with the default `make all`; **MPU examples** build with `make mpu` (or CMake `-DMEMKIT_MPU=ON` / `-DMEMKIT_EMBEDDED_LINUX=ON`).
+
+### MCU — bare-metal / RTOS
+
+Fixed storage, ISR/task patterns, and composition recipes — no heap required.
 
 | Example | Language | Demonstrates |
 |---------|----------|--------------|
-| `example_mcu.cpp` | C++ | Static ring + arena-backed ring |
-| `example_mcu_c.c` | C | Tier-1 ring + queue with caller storage |
-| `example_embedded_patterns.cpp` | C++ | DoubleBuffer, MpscQueue, LookupTable, bit stream, MovingAverage |
-| `example_comm_pipeline.cpp` | C++ | ByteRing RX, SpscQueue, TokenBucket pacing |
+| [`example_mcu.cpp`](examples/example_mcu.cpp) | C++ | Static ring + arena-backed ring |
+| [`example_mcu_c.c`](examples/example_mcu_c.c) | C | Tier-1 ring + queue with caller storage (`memkit_helpers.h`) |
+| [`example_embedded_patterns.cpp`](examples/example_embedded_patterns.cpp) | C++ | DoubleBuffer, MpscQueue, LookupTable, bit stream, MovingAverage |
+| [`example_comm_pipeline.cpp`](examples/example_comm_pipeline.cpp) | C++ | ByteRing RX, SpscQueue, TokenBucket pacing |
 
-MPU examples: `example_mpu.cpp` (C++ virtual-memory arena), `example_mpu.c` (C arena create + tier-2 create helpers). Built with `make mpu`. On Windows MPU, arena backing uses `VirtualAlloc`.
+```bash
+make all
+./build/example_mcu
+./build/example_embedded_patterns
+```
+
+### MPU — embedded Linux / capable host
+
+Heap and virtual arena backing, full tier-2 C API, and `*_create` lifecycle — the paths gated off on MCU.
+
+| Example | Language | Demonstrates |
+|---------|----------|--------------|
+| [`example_mpu.cpp`](examples/example_mpu.cpp) | C++ | `mmap_storage` / `mmap_arena` (POSIX `mmap` or Windows `VirtualAlloc`), arena-owned ring |
+| [`example_mpu.c`](examples/example_mpu.c) | C | `arena_create` (virtual backing by default), `ring_create`, tier-2-ready MPU C API |
+
+```bash
+make mpu
+./build/example_mpu
+./build/example_mpu_c
+```
+
+Integration test [`tests/test_c_api_extended.c`](tests/test_c_api_extended.c) (built with `make mpu`) exercises `arena_create` plus every tier-2 `*_create` helper on one shared arena.
 
 ---
 
