@@ -29,7 +29,26 @@ typedef struct ring {
 } ring_t;
 ```
 
-Do not read or write `bytes`. Size macros live in [`memkit_object_sizes.h`](../include/memkit_object_sizes.h).
+Do not read or write `bytes`. Size macros live in [`memkit_object_sizes.h`](../include/memkit_object_sizes.h):
+
+| Macro | Bytes | Notes |
+|-------|------:|-------|
+| `MEMKIT_RING_OBJ_BYTES` | 160 | Embeds callback bridge (not 128) |
+| `MEMKIT_VECTOR_OBJ_BYTES` | 192 | |
+| `MEMKIT_STACK_OBJ_BYTES` | 192 | |
+| `MEMKIT_QUEUE_OBJ_BYTES` | 192 | |
+| `MEMKIT_BITSET_OBJ_BYTES` | 128 | |
+| `MEMKIT_OBJPOOL_OBJ_BYTES` | 192 | |
+| `MEMKIT_HANDLE_POOL_OBJ_BYTES` | 128 | |
+| `MEMKIT_DEQUE_OBJ_BYTES` | 256 | Tier 2 |
+| `MEMKIT_LIST_OBJ_BYTES` | 192 | Tier 2 |
+| `MEMKIT_DLIST_OBJ_BYTES` | 256 | Tier 2 |
+| `MEMKIT_PQUEUE_OBJ_BYTES` | 256 | Tier 2 |
+| `MEMKIT_HASHMAP_OBJ_BYTES` | 512 | Tier 2 |
+| `MEMKIT_BTREE_OBJ_BYTES` | 512 | Tier 2 |
+| `MEMKIT_LRUCACHE_OBJ_BYTES` | 512 | Tier 2 |
+
+Sizes are verified at library build time in `src/c_api/bindings.cpp`.
 
 ### Status codes
 
@@ -56,6 +75,25 @@ Always check return values (`[[nodiscard]]`).
 | `*_create` | Output `ring_t **` heap/arena allocated (MPU) | Library or arena allocates | `*_destroy` |
 
 Never `*_init` on a temporary and copy the opaque blob — callback bridges inside the object must stay at a fixed address.
+
+### Common lifecycle and introspection
+
+Every container (except arena, which uses `arena_*` directly) follows the same pattern:
+
+| Function | Purpose |
+|----------|---------|
+| `*_init` | Embed handle; caller supplies storage in config |
+| `*_create` | MPU: heap/arena-allocated handle + optional dynamic storage |
+| `*_deinit` | Tear down embedded handle; may free owned storage |
+| `*_destroy` | Free handle from `*_create` |
+| `*_size` | Current element count |
+| `*_capacity` | Maximum elements |
+| `*_empty` | Count == 0 |
+| `*_full` | At capacity (where applicable; vector has no `*_full`) |
+| `*_clear` | Remove all elements |
+| `*_status_ok` | Test for `*_OK` |
+
+Tier-2 `*_init` / `*_create` on MCU return `*_ERR_UNSUPPORTED`.
 
 ### Element pointers
 
@@ -117,7 +155,9 @@ Present on most element containers (names prefixed per container, e.g. `RING_FLA
 
 For ring-like sequential containers, **`index 0` is the logical front** (oldest queued element). `peek_at` / `foreach` walk front → back.
 
-### DMA-friendly contiguous regions (ring, queue)
+### DMA-friendly contiguous regions (ring and queue only)
+
+**`deque_t` has no contiguous read/write API.** Only ring and queue expose zero-copy DMA/UART windows:
 
 | Function | Parameters | Returns / effect |
 |----------|------------|------------------|
@@ -190,10 +230,12 @@ Circular buffer; optional overwrite-oldest policy.
 | Function | Notes |
 |----------|-------|
 | `ring_push_back` / `ring_push_front` | `elem` in |
-| `ring_pop_front` / `ring_pop_back` | `out_elem` out (may be NULL to discard) |
-| `ring_peek_*` | Read without remove |
+| `ring_pop_front` / `ring_pop_back` | `out_elem` out (NULL to discard) |
+| `ring_peek_front` / `peek_back` / `peek_at` | Read without remove |
 | `ring_set_at` | Replace at logical index |
 | `ring_foreach` | Visit front→back; stop if visit returns ≠ OK |
+| `ring_readable_contiguous` / `writable_contiguous` | DMA zero-copy windows |
+| `ring_commit_read` / `commit_write` | Advance after contiguous I/O |
 
 ---
 
@@ -206,13 +248,15 @@ Strict FIFO; fails when full unless growable (MPU).
 | `queue_push` | Back in |
 | `queue_pop` | Front out |
 | `queue_peek_front` / `peek_back` / `peek_at` | Non-mutating read |
-| Contiguous + commit | Same semantics as ring |
+| `queue_foreach` | Visit front→back |
+| `queue_readable_contiguous` / `writable_contiguous` | DMA zero-copy (same semantics as ring) |
+| `queue_commit_read` / `commit_write` | Advance after contiguous I/O |
 
 ---
 
 ## Vector (`vector.h`) — tier 1
 
-Contiguous array; optional growable on MPU.
+Contiguous array; optional growable on MPU. No `vector_full` — use `size` vs `capacity`.
 
 | Function | Notes |
 |----------|-------|
@@ -220,7 +264,8 @@ Contiguous array; optional growable on MPU.
 | `vector_push_back` / `pop_back` | End operations |
 | `vector_set_at` | Write index (must exist) |
 | `vector_at` / `vector_at_const` | Unchecked pointer to element |
-| `vector_peek_*` | Same as indexed read |
+| `vector_peek_front` / `peek_back` / `peek_at` | Indexed read |
+| `vector_foreach` | Visit all elements |
 
 ---
 
@@ -230,21 +275,26 @@ LIFO; type name is `cstack_t` (avoids C `stack` keyword clashes).
 
 | Function | Notes |
 |----------|-------|
+| `stack_reserve` | Ensure capacity ≥ min (MPU growable) |
 | `stack_push` | Top in |
 | `stack_pop` / `stack_peek` | Top out / read |
 | `stack_top` / `stack_top_const` | Pointer to top element |
+| `stack_foreach` | Visit bottom→top |
 
 ---
 
 ## Deque (`deque.h`) — tier 2 (MPU)
 
-Double-ended queue.
+Double-ended queue. **No** contiguous read/write API (unlike ring/queue).
 
 | Function | Notes |
 |----------|-------|
+| `deque_reserve` | Ensure capacity ≥ min (MPU growable) |
 | `deque_push_front` / `push_back` | Both ends |
 | `deque_pop_front` / `pop_back` | Both ends |
-| `deque_front` / `deque_back` | Mutable pointers to ends |
+| `deque_peek_front` / `peek_back` / `peek_at` | Non-mutating read |
+| `deque_front` / `front_const` / `back` / `back_const` | Mutable/const pointers to ends |
+| `deque_foreach` | Visit front→back |
 
 ---
 
@@ -263,11 +313,16 @@ Fixed bit vector; no `elem_size`.
 
 | Function | Notes |
 |----------|-------|
-| `bitset_set` / `reset` / `toggle` / `assign` | Single bit |
+| `bitset_storage_bytes` | Size byte buffer for `capacity` bits |
+| `bitset_tail_mask` | Valid-bit mask for last partial byte |
+| `bitset_test` / `set` / `reset` / `toggle` / `assign` | Single bit |
+| `bitset_set_all` | Set every bit |
 | `bitset_find_first_set` / `find_first_clear` | `start_index` search start; `out_index` result |
+| `bitset_copy` / `bitset_equal` | Compare or duplicate |
 | `bitset_union_with` / `intersect_with` / `xor_with` / `complement` | In-place bitwise ops |
 | `bitset_load_bytes` / `store_bytes` | Raw bulk I/O |
-| `bitset_data` | Pointer to underlying bytes |
+| `bitset_data` / `data_const` / `data_bytes` | Underlying byte access |
+| `bitset_foreach` | Visit set bits |
 
 ---
 
@@ -285,10 +340,14 @@ Fixed slab; same-sized objects.
 
 | Function | Notes |
 |----------|-------|
+| `objpool_storage_bytes` / `free_stack_bytes` / `used_bits_bytes` | Static storage sizing |
 | `objpool_alloc` | `out_elem` receives pointer into slab |
 | `objpool_alloc_copy` | Alloc + copy from `src` |
 | `objpool_free` | Return slot |
 | `objpool_contains` | Pointer in pool and live? |
+| `objpool_index` | Slot index for live pointer |
+| `objpool_foreach` | Visit live slots |
+| `objpool_available` | Free slot count |
 
 ---
 
@@ -305,10 +364,12 @@ Stable `handle_t` (generation-stamped ID) → object.
 
 | Function | Notes |
 |----------|-------|
+| `handle_pool_storage_bytes` / `generations_bytes` / `free_stack_bytes` | Static storage sizing |
 | `handle_pool_acquire` | `out_elem` + `out_handle`; handle 0 = invalid |
 | `handle_pool_release` | Invalidate handle |
 | `handle_pool_get` | Resolve handle → element pointer |
 | `handle_pool_valid` | Handle still live? |
+| `handle_pool_available` | Free slot count |
 
 ---
 
@@ -327,10 +388,15 @@ Stable `handle_t` (generation-stamped ID) → object.
 
 | Function | Notes |
 |----------|-------|
+| `hashmap_hash_bytes` / `key_equal_bytes` | Callback storage sizing |
+| `hashmap_open_slot_stride` | One open-addressing slot size |
+| `hashmap_strategy_of` | Current chaining vs open addressing |
+| `hashmap_bucket_count` | Bucket/slot count |
 | `hashmap_put` | Insert or update |
 | `hashmap_get` | `out_value` filled on hit |
 | `hashmap_remove` | Delete key |
-| `hashmap_open_slot_stride` | Size one OA slot for static storage |
+| `hashmap_contains` | Key present? |
+| `hashmap_foreach` | Visit all entries |
 
 ---
 
@@ -349,6 +415,8 @@ Ordered map; nodes from fixed pool.
 
 | Function | Notes |
 |----------|-------|
+| `btree_compare_bytes` | Compare callback storage size |
+| `btree_node_stride` | Bytes per node in pool |
 | `btree_insert` | Add key |
 | `btree_get` / `remove` / `contains` | Lookup |
 | `btree_peek_min` / `peek_max` | Extremes without remove |
@@ -366,8 +434,10 @@ Binary heap priority queue.
 
 | Function | Notes |
 |----------|-------|
+| `pqueue_reserve` | Ensure capacity ≥ min (MPU growable) |
 | `pqueue_push` / `pop` / `peek` | Heap operations |
-| `pqueue_top` | Pointer to best element |
+| `pqueue_top` / `top_const` | Pointer to best element |
+| `pqueue_foreach` | Visit heap order |
 
 ---
 
@@ -385,10 +455,15 @@ Singly / doubly linked lists over a **node pool**.
 
 | Function | Notes |
 |----------|-------|
+| `list_node_stride` / `dlist_node_stride` | Bytes per node in pool |
 | `list_push_front` / `push_back` | O(1) |
+| `list_pop_front` / `pop_back` | Remove ends |
+| `list_peek_front` / `peek_back` / `peek_at` | Non-mutating read |
 | `list_insert_at` / `remove_at` | Indexed |
 | `list_remove_first` | Remove first matching `pred(elem, pred_user)` |
-| DList adds `pop_back`, `back`, `foreach_reverse` | — |
+| `list_front` / `front_const` | Head pointer |
+| `list_foreach` | Forward visit |
+| DList adds `dlist_back` / `back_const`, `dlist_foreach_reverse` | — |
 
 ---
 
@@ -407,10 +482,36 @@ Fixed-capacity LRU map.
 
 | Function | Notes |
 |----------|-------|
-| `lrucache_get` | Promotes to MRU |
+| `lrucache_entry_stride` / `entry_pool_bytes` / `buckets_bytes` | Static storage sizing |
+| `lrucache_default_bucket_count` | Suggested bucket count for capacity |
+| `lrucache_get` | Promotes to MRU; fills `out_value` |
+| `lrucache_peek` | Read without promoting |
 | `lrucache_put` | Insert/update; may evict LRU |
+| `lrucache_remove` | Delete key |
+| `lrucache_contains` | Key present? |
 | `lrucache_touch` | Bump existing key |
 | `lrucache_foreach_mru` / `foreach_lru` | Iteration order |
+
+---
+
+## Helpers (`memkit_helpers.h`)
+
+Included via `<memkit.h>`; macros only — no extra link cost. **Tier-1 static init only** — no `MEMKIT_*_INIT_STATIC` for tier-2 containers.
+
+| Symbol | Purpose |
+|--------|---------|
+| `memkit_elem_storage_bytes` / `MEMKIT_ELEM_STORAGE_BYTES` | Element slab size |
+| `MEMKIT_ELEM_STORAGE(type, cap, name)` | Declare aligned element buffer |
+| `MEMKIT_RETURN_IF_NOT_OK` / `MEMKIT_RETURN_VAL_IF_NOT_OK` | Early return on error |
+| `MEMKIT_ARENA_INIT_STATIC` | Embed arena over static buffer |
+| `MEMKIT_RING_INIT_STATIC` / `MEMKIT_RING_INIT_STATIC_OVERWRITE` | Ring over static storage |
+| `MEMKIT_QUEUE_INIT_STATIC` | Queue over static storage |
+| `MEMKIT_VECTOR_INIT_STATIC` | Vector over static storage |
+| `MEMKIT_STACK_INIT_STATIC` | Stack over static storage |
+| `MEMKIT_BITSET_INIT_STATIC` | Bitset over static byte buffer |
+| `MEMKIT_OBJPOOL_STORAGE` / `MEMKIT_OBJPOOL_INIT_STATIC` | ObjPool slab + metadata |
+| `MEMKIT_HANDLE_POOL_STORAGE` / `MEMKIT_HANDLE_POOL_INIT_STATIC` | HandlePool slab + metadata |
+| `memkit_ring_status_string` / `memkit_queue_status_string` / `memkit_arena_status_string` | Debug status strings |
 
 ---
 

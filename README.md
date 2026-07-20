@@ -237,7 +237,7 @@ Include the umbrella header:
 #include <memkit/memkit.hpp>
 ```
 
-**Parameter reference:** [docs/CXX_API_REFERENCE.md](docs/CXX_API_REFERENCE.md) — init overloads, policies, return types.
+**Parameter reference:** [docs/CXX_API_REFERENCE.md](docs/CXX_API_REFERENCE.md) — init overloads, policies, return types. Authoritative signatures: headers in `include/memkit/`.
 
 All containers live in namespace `memkit`. Operations return `memkit::status`; use `memkit::ok(st)` to test success.
 
@@ -516,7 +516,7 @@ Include the umbrella header:
 
 Or include individual headers (`ring.h`, `vector.h`, …). All symbols are C23, `[[nodiscard]]` where supported.
 
-**Parameter reference:** [docs/C_API_REFERENCE.md](docs/C_API_REFERENCE.md) — config fields, flags, callbacks, and operations.
+**Parameter reference:** [docs/C_API_REFERENCE.md](docs/C_API_REFERENCE.md) — config fields, flags, callbacks, lifecycle, and all operations. Authoritative signatures: headers in `include/*.h`.
 
 ### Tiers
 
@@ -527,31 +527,31 @@ Controlled by `MEMKIT_C_API_FULL` and `MEMKIT_C_API_EXTENDED` in `memkit_config.
 | Container | Header | Opaque size macro |
 |-----------|--------|-------------------|
 | Arena | `arena.h` | (struct fields visible) |
-| Ring | `ring.h` | `MEMKIT_RING_OBJ_BYTES` |
-| Vector | `vector.h` | `MEMKIT_VECTOR_OBJ_BYTES` |
-| Stack | `stack.h` | `MEMKIT_STACK_OBJ_BYTES` |
-| Queue | `queue.h` | `MEMKIT_QUEUE_OBJ_BYTES` |
-| Bitset | `bitset.h` | `MEMKIT_BITSET_OBJ_BYTES` |
-| ObjPool | `objpool.h` | `MEMKIT_OBJPOOL_OBJ_BYTES` |
-| HandlePool | `handle_pool.h` | `MEMKIT_HANDLE_POOL_OBJ_BYTES` |
+| Ring | `ring.h` | `MEMKIT_RING_OBJ_BYTES` (160) |
+| Vector | `vector.h` | `MEMKIT_VECTOR_OBJ_BYTES` (192) |
+| Stack | `stack.h` | `MEMKIT_STACK_OBJ_BYTES` (192) |
+| Queue | `queue.h` | `MEMKIT_QUEUE_OBJ_BYTES` (192) |
+| Bitset | `bitset.h` | `MEMKIT_BITSET_OBJ_BYTES` (128) |
+| ObjPool | `objpool.h` | `MEMKIT_OBJPOOL_OBJ_BYTES` (192) |
+| HandlePool | `handle_pool.h` | `MEMKIT_HANDLE_POOL_OBJ_BYTES` (128) |
 
 **Tier 2 — full on MPU; MCU stubs link but return `*_ERR_UNSUPPORTED`**
 
-| Container | Header |
-|-----------|--------|
-| Deque | `deque.h` |
-| HashMap | `hashmap.h` |
-| BTree | `btree.h` |
-| PQueue | `pqueue.h` |
-| List | `list.h` |
-| DList | `dlist.h` |
-| LruCache | `lrucache.h` |
+| Container | Header | Opaque size macro |
+|-----------|--------|-------------------|
+| Deque | `deque.h` | `MEMKIT_DEQUE_OBJ_BYTES` (256) |
+| HashMap | `hashmap.h` | `MEMKIT_HASHMAP_OBJ_BYTES` (512) |
+| BTree | `btree.h` | `MEMKIT_BTREE_OBJ_BYTES` (512) |
+| PQueue | `pqueue.h` | `MEMKIT_PQUEUE_OBJ_BYTES` (256) |
+| List | `list.h` | `MEMKIT_LIST_OBJ_BYTES` (192) |
+| DList | `dlist.h` | `MEMKIT_DLIST_OBJ_BYTES` (256) |
+| LruCache | `lrucache.h` | `MEMKIT_LRUCACHE_OBJ_BYTES` (512) |
 
 On MCU firmware that needs tier-2 containers, use the C++ API (`memkit.hpp`) with static or arena storage instead of the C stubs.
 
 ### Complete C API reference
 
-Every C container follows the same conventions: `<name>_status_t`, `<name>_config_t`, opaque `<name>_t` blob, `<name>_init` / `<name>_create` / `<name>_deinit` / `<name>_destroy`, and `<name>_status_ok()`. Element types are passed as `void *` with `elem_size` (and optional copy/destroy callbacks).
+Every C container follows the same conventions: `<name>_status_t`, `<name>_config_t`, opaque `<name>_t` blob, lifecycle (`*_init` / `*_create` / `*_deinit` / `*_destroy`), introspection (`*_size`, `*_capacity`, `*_empty`, `*_clear`), and `<name>_status_ok()`. Full per-function reference: [docs/C_API_REFERENCE.md](docs/C_API_REFERENCE.md).
 
 **Arena** (`arena.h`) — tier 1, all targets
 
@@ -570,22 +570,22 @@ Every C container follows the same conventions: `<name>_status_t`, `<name>_confi
 | Ring | `ring.h` | `push_back`/`front`, `pop_*`, `peek_*`, `set_at`, `foreach`, `readable_contiguous`, `writable_contiguous`, `commit_read`/`write` |
 | Queue | `queue.h` | `push`, `pop`, `peek_*`, `foreach`, contiguous + commit (same as ring) |
 | Vector | `vector.h` | `reserve`, `push_back`, `pop_back`, `peek_*`, `set_at`, `at`, `foreach` |
-| Stack | `stack.h` | `push`, `pop`, `peek`, `foreach` |
-| Bitset | `bitset.h` | `set`/`reset`/`test`/`toggle`, `set_all`, `find_first_*`, `union_with`, `intersect_with`, `xor_with`, `complement`, `load_bytes`/`store_bytes`, `foreach` |
-| ObjPool | `objpool.h` | `alloc`, `free`, `contains`, `foreach` |
-| HandlePool | `handle_pool.h` | `acquire`, `release`, `valid`, `get`, `handle_t`, storage sizing helpers |
+| Stack | `stack.h` | `push`, `pop`, `peek`, `top`/`top_const`, `reserve`, `foreach` |
+| Bitset | `bitset.h` | `test`/`set`/`reset`/`toggle`, `set_all`, `find_first_*`, set algebra, `copy`/`equal`, `load_bytes`/`store_bytes`, `foreach` |
+| ObjPool | `objpool.h` | `alloc`, `alloc_copy`, `free`, `contains`, `index`, `foreach`, sizing helpers |
+| HandlePool | `handle_pool.h` | `acquire`, `release`, `valid`, `get`, `handle_t`, sizing helpers |
 
 **Tier 2 containers** — MPU full; MCU stubs return `*_ERR_UNSUPPORTED`
 
 | Container | Header | Key functions |
 |-----------|--------|---------------|
-| Deque | `deque.h` | `push_back`/`front`, `pop_*`, `peek_*`, `foreach`, contiguous + commit |
+| Deque | `deque.h` | `push_*`, `pop_*`, `peek_*`, `front`/`back` pointers, `reserve`, `foreach` (no DMA contiguous API) |
 | HashMap | `hashmap.h` | `put`, `get`, `remove`, `contains`, `foreach`; `hash_fn`, `key_eq_fn`; chaining or open addressing |
 | BTree | `btree.h` | `insert`, `get`, `remove`, `contains`, `peek_min`/`max`, `foreach`; `compare_fn` |
-| PQueue | `pqueue.h` | `push`, `pop`, `peek`, `foreach`; `compare_fn` |
-| List | `list.h` | `push_*`, `pop_*`, `peek_at`, `insert_at`, `remove_at`, `remove_first`, `front`, `foreach` |
+| PQueue | `pqueue.h` | `push`, `pop`, `peek`, `top`/`top_const`, `reserve`, `foreach`; `compare_fn` |
+| List | `list.h` | `push_*`, `pop_*`, `peek_*`, `insert_at`, `remove_at`, `remove_first`, `front`, `foreach` |
 | DList | `dlist.h` | Same as list plus `back`, `foreach_reverse` |
-| LruCache | `lrucache.h` | `get`, `put`, `remove`, `contains`, `touch`, `peek`, `foreach_mru`/`lru`; key/value callbacks |
+| LruCache | `lrucache.h` | `get`, `peek`, `put`, `remove`, `contains`, `touch`, `foreach_mru`/`lru`; sizing helpers |
 
 **Umbrella header:** `#include <memkit.h>` pulls `memkit_config.h`, all container headers above, and [`memkit_helpers.h`](include/memkit_helpers.h) (macros only — no extra link cost).
 
@@ -597,7 +597,7 @@ MEMKIT_QUEUE_INIT_STATIC(&queue, my_t, buf);
 MEMKIT_RETURN_VAL_IF_NOT_OK(queue_push(&queue, &item), -1);
 ```
 
-See [Getting started](docs/GETTING_STARTED.md) and [Container guide](docs/CONTAINER_GUIDE.md).
+See [C API reference](docs/C_API_REFERENCE.md) for the full function list, opaque sizes, and [`memkit_helpers.h`](include/memkit_helpers.h) macros.
 
 ### Opaque objects
 
@@ -716,7 +716,7 @@ On MPU, `arena_create()` / `arena_create_with_backing()` can allocate mmap or he
 
 ### Ring-specific: DMA-friendly regions
 
-Ring (and queue/deque C APIs built on the same core) expose contiguous read/write windows:
+**Ring and queue only** — `deque_t` has no contiguous read/write API. Both expose zero-copy DMA/UART windows:
 
 ```c
 const void *rx = NULL;

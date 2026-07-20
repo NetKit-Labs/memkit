@@ -195,8 +195,8 @@ Intrusive-node pool; `push_*`, `pop_*`, `insert_at`, `remove_at`, `foreach` (+ r
 | `MpscQueue<T>` | `mpsc_queue.hpp` | **Lock-free** | Multi-producer `push`, single `pop`; aligned storage |
 | `DoubleBuffer<T>` | `double_buffer.hpp` | **Wait-free** | `write_span`, `publish`, `read_span` |
 | `ByteRing` | `byte_ring.hpp` | Single-threaded | `push_bytes`, contiguous read/write |
-| `SmallString<N>` | — | Single-threaded | `assign`, `append`, `view`, `c_str` |
-| `SmallBuffer<N>` | — | Single-threaded | `assign`, `data`, `size` |
+| `SmallString<N>` | `small_string.hpp` | Single-threaded | `assign`, `append`, `view`, `c_str` |
+| `SmallBuffer<N>` | `small_buffer.hpp` | Single-threaded | `assign`, `data`, `size` |
 | `TimerWheel<N>` | `timer_wheel.hpp` | Single-threaded | `schedule(node, ticks)`, `cancel`, `tick` |
 | `TokenBucket` | `token_bucket.hpp` | Single-threaded | `refill`, `try_consume`, `consume` |
 | `RingLog<Record>` | `ring_log.hpp` | Single-threaded | `append`, `foreach` (newest/oldest order) |
