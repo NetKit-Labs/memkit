@@ -4,6 +4,14 @@ Embedded-friendly containers for C and C++ — **bare-metal MCU firmware and MPU
 
 **New here?** [Getting started](docs/GETTING_STARTED.md) · [Adoption guide](docs/ADOPTION_GUIDE.md) · [Concurrency & RTOS](docs/CONCURRENCY.md) · [C API reference](docs/C_API_REFERENCE.md) · [C++ API reference](docs/CXX_API_REFERENCE.md) · [Design philosophy](docs/DESIGN_PHILOSOPHY.md) · [Which container?](docs/CONTAINER_GUIDE.md) · [Bare-metal C lib](docs/DISTRIBUTING_MCU_C.md)
 
+## Engineering Highlights
+
+- **Explicit MCU/MPU memory policies:** Caller-owned static or arena storage for bare-metal/RTOS firmware; heap or `mmap`/`VirtualAlloc` arena backing for MPU hosts. Both deployment models support the same 32 C++ utilities ([targets](#targets), [memory models](#memory-models)).
+- **One implementation, two APIs:** 32 C++ utilities and 14 C containers share underlying container cores, rather than maintaining separate C and C++ algorithms ([design](#design), [API references](docs/C_API_REFERENCE.md)).
+- **Deterministic handoff options:** Lock-free SPSC/MPSC queues and a double buffer for specified producer/consumer roles; other containers are deliberately single-owner with no hidden RTOS locks, RTTI, or virtual dispatch ([concurrency contracts](docs/CONCURRENCY.md)).
+- **Automated validation:** Default MCU build includes 32 C++ tests and eight C API tests; additional MPU paths, sanitizer runs, and Linux/macOS/Windows jobs are covered by GitHub Actions ([quick start](#quick-start), [CI matrix](#ci)).
+- **Repeatable host benchmarks:** Timing and executable-size comparisons against hand-rolled C, with commands and sample output documented; these are **host measurements, not board-level performance claims** ([benchmarks](#benchmarks), [MCU/MPU examples](#examples)).
+
 ## Quick start
 
 memkit is built for **embedded systems in two deployment models** — not “MCU only with optional Linux.” Both get the full **32 C++ utilities**; the difference is what memory the platform allows (static/arena vs heap/virtual backing) and how much of the **C API** is linked in.
