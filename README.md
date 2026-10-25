@@ -908,6 +908,7 @@ GitHub Actions (`.github/workflows/ci.yml`):
 
 | Job | What it runs |
 |-----|----------------|
+| `cppcheck` | Cppcheck (default checks) — `make cppcheck` on `src/`, `tests/`, `examples/`, `benchmarks/` |
 | `mcu-ubuntu` | Clang 21 — `make all` + `lib-mcu-c` / `check-lib-mcu-c` / `test-lib-mcu-c-link` |
 | `mcu-gcc-ubuntu` | GCC 14 (C++23) — `make all` + freestanding C lib targets |
 | `mpu-ubuntu` | Clang 21 — `make mpu` (tier-2 C API + `test_heap_arena_cpp`) |
