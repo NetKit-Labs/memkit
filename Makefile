@@ -45,8 +45,11 @@ MPU_CFLAGS = -std=c23 -Wall -Wextra -Wpedantic -Iinclude -DMEMKIT_MPU=1 -DEMBEDD
              -DMEMKIT_ALLOW_HEAP=1 -DMEMKIT_ALLOW_MMAP=1
 MPU_OBJS = $(BUILD)/mpu/arena.o $(BUILD)/mpu/mmap_backing.o $(BUILD)/mpu/c_api/bindings.o
 
+CPPCHECK ?= cppcheck
+CPPCHECK_DIRS = src tests examples benchmarks
+
 .PHONY: all test_cpp test_c_api test_c_api_mpu test_c_api_extended test_cpp_mpu mcu mpu clean lib \
-	lib-mcu-c check-lib check-lib-mcu-c test-lib-mcu-c-link benchmark benchmark-size
+	lib-mcu-c check-lib check-lib-mcu-c test-lib-mcu-c-link benchmark benchmark-size cppcheck
 
 # Freestanding MCU C API archive (no libstdc++ at link time for C customers).
 MCU_C_CXXFLAGS = $(CXXFLAGS) -ffreestanding
@@ -240,6 +243,9 @@ $(BUILD)/mpu:
 
 $(BUILD):
 	mkdir -p $(BUILD)
+
+cppcheck:
+	$(CPPCHECK) --error-exitcode=1 -Iinclude $(CPPCHECK_DIRS)
 
 clean:
 	rm -rf $(BUILD)

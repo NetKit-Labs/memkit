@@ -255,6 +255,7 @@ make test_cpp         # C++ container tests only
 make test_c_api       # tier-1 C API tests (MCU, 8 binaries)
 make mpu              # MPU: tier-2 C API tests + test_heap_arena_cpp + integration test
 make lib-mcu-c        # freestanding tier-1 C archive for pure-C firmware
+make cppcheck         # Cppcheck (default checks; requires cppcheck on PATH)
 make clean
 ```
 
@@ -912,10 +913,15 @@ You may still `#include <vector>` directly in your own MPU code; memkit just doe
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`):
+GitHub Actions (`.github/workflows/ci.yml`) runs builds, tests, and **Cppcheck** static analysis on every push and pull request to `main`:
+
+```bash
+make cppcheck   # same command as the cppcheck CI job (install: apt/brew cppcheck)
+```
 
 | Job | What it runs |
 |-----|----------------|
+| `cppcheck` | Cppcheck (default checks) — `make cppcheck` on `src/`, `tests/`, `examples/`, `benchmarks/` |
 | `mcu-ubuntu` | Clang 21 — `make all` + `lib-mcu-c` / `check-lib-mcu-c` / `test-lib-mcu-c-link` |
 | `mcu-gcc-ubuntu` | GCC 14 (C++23) — `make all` + freestanding C lib targets |
 | `mpu-ubuntu` | Clang 21 — `make mpu` (tier-2 C API + `test_heap_arena_cpp`) |

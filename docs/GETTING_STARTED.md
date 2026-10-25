@@ -197,6 +197,7 @@ git clone https://github.com/NetKit-Labs/memkit.git
 cd memkit
 make all          # MCU: lib + tests + 4 MCU examples
 make mpu          # MPU: tier-2 C tests + heap arena test + 2 MPU examples + integration test
+make cppcheck     # static analysis (Cppcheck; same as CI — install cppcheck first)
 ```
 
 ### CMake (in-tree)

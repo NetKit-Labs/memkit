@@ -11,6 +11,15 @@ defaults:
     shell: bash
 
 jobs:
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: Cppcheck (default settings)
+        run: make cppcheck
+
   mcu-ubuntu:
     runs-on: ubuntu-latest
     steps:
